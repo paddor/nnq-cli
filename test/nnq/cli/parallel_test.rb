@@ -44,7 +44,7 @@ describe "pipe -P parallel execution" do
       out_endpoints: [NNQ::CLI::Endpoint.new(results_url, false)],
       parallel:      2,
       recv_expr:     FIB_EXPR,
-      timeout:       2,
+      timeout:       0.3,
     )
 
     io_thread = Thread.new do
@@ -83,7 +83,7 @@ describe "pipe -P parallel execution" do
       out_endpoints: [NNQ::CLI::Endpoint.new(results_url, false)],
       parallel:      2,
       recv_expr:     expr,
-      timeout:       2,
+      timeout:       0.3,
     )
 
     io_thread = Thread.new do
