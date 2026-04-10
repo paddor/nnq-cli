@@ -64,8 +64,8 @@ module NNQ
 
 
       def build_pull_push(in_eps, out_eps)
-        pull = SocketSetup.build(NNQ::PULL, config)
-        push = SocketSetup.build(NNQ::PUSH, config)
+        pull = SocketSetup.build(NNQ::PULL0, config)
+        push = SocketSetup.build(NNQ::PUSH0, config)
         SocketSetup.attach_endpoints(pull, in_eps, verbose: config.verbose)
         SocketSetup.attach_endpoints(push, out_eps, verbose: config.verbose)
         [pull, push]

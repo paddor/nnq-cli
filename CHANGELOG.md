@@ -23,6 +23,8 @@
   or YJIT is already on).
 - **Consistent `nnq:` prefix** on all attach and event log lines.
 - **`-vvvv` timestamps** — ISO8601 UTC with µs precision.
+- **3 new socket runners** — `nnq bus`, `nnq surveyor`, `nnq respondent`.
+- **Versioned socket symbols** — RUNNER_MAP uses `:PUSH0`, `:PULL0`, etc.
 
 ## 0.1.0 — 2026-04-09
 

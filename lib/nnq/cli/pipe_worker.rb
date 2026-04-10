@@ -37,8 +37,8 @@ module NNQ
 
 
       def setup_sockets
-        @pull = NNQ::CLI::SocketSetup.build(NNQ::PULL, @config)
-        @push = NNQ::CLI::SocketSetup.build(NNQ::PUSH, @config)
+        @pull = NNQ::CLI::SocketSetup.build(NNQ::PULL0, @config)
+        @push = NNQ::CLI::SocketSetup.build(NNQ::PUSH0, @config)
         NNQ::CLI::SocketSetup.attach_endpoints(@pull, @in_eps, verbose: 0)
         NNQ::CLI::SocketSetup.attach_endpoints(@push, @out_eps, verbose: 0)
       end

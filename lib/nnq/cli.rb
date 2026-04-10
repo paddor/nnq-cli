@@ -14,6 +14,8 @@ require_relative "cli/push_pull"
 require_relative "cli/pub_sub"
 require_relative "cli/req_rep"
 require_relative "cli/pair"
+require_relative "cli/bus"
+require_relative "cli/surveyor_respondent"
 require_relative "cli/ractor_helpers"
 require_relative "cli/pipe_worker"
 require_relative "cli/pipe"
@@ -42,18 +44,21 @@ module NNQ
 
   # Command-line interface for NNQ socket operations.
   module CLI
-    SOCKET_TYPE_NAMES = %w[req rep pub sub push pull pair pipe].freeze
+    SOCKET_TYPE_NAMES = %w[req rep pub sub push pull pair bus surveyor respondent pipe].freeze
 
 
     RUNNER_MAP = {
-      "push" => [PushRunner, :PUSH],
-      "pull" => [PullRunner, :PULL],
-      "pub"  => [PubRunner,  :PUB],
-      "sub"  => [SubRunner,  :SUB],
-      "req"  => [ReqRunner,  :REQ],
-      "rep"  => [RepRunner,  :REP],
-      "pair" => [PairRunner, :PAIR],
-      "pipe" => [PipeRunner, nil],
+      "push"       => [PushRunner,       :PUSH0],
+      "pull"       => [PullRunner,       :PULL0],
+      "pub"        => [PubRunner,        :PUB0],
+      "sub"        => [SubRunner,        :SUB0],
+      "req"        => [ReqRunner,        :REQ0],
+      "rep"        => [RepRunner,        :REP0],
+      "pair"       => [PairRunner,       :PAIR0],
+      "bus"        => [BusRunner,        :BUS0],
+      "surveyor"   => [SurveyorRunner,   :SURVEYOR0],
+      "respondent" => [RespondentRunner, :RESPONDENT0],
+      "pipe"       => [PipeRunner,       nil],
     }.freeze
 
 
