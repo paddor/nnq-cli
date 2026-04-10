@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "socket"
+
 module NNQ
   module CLI
     # Parses and validates command-line arguments for the nnq CLI.
@@ -315,7 +317,7 @@ module NNQ
           }
 
           o.separator "\nOther:"
-          o.on("-v", "--verbose",   "Verbosity: -v endpoints, -vv events, -vvv messages") { opts[:verbose] += 1 }
+          o.on("-v", "--verbose",   "Verbosity: -v endpoints, -vv events, -vvv messages, -vvvv timestamps") { opts[:verbose] += 1 }
           o.on("-q", "--quiet",     "Suppress message output")           { opts[:quiet] = true }
           o.on(      "--transient", "Exit when all peers disconnect")    { opts[:transient] = true }
           o.on("-V", "--version") {
@@ -353,10 +355,19 @@ module NNQ
           opts[:type_name] = type_name.downcase
         end
 
-        normalize    = ->(url) { url.sub(%r{\Atcp://\*:}, "tcp://0.0.0.0:").sub(%r{\Atcp://:}, "tcp://localhost:") }
-        normalize_ep = ->(ep)  { Endpoint.new(normalize.call(ep.url), ep.bind?) }
-        opts[:binds].map!(&normalize)
-        opts[:connects].map!(&normalize)
+        # Normalize shorthand hostnames to concrete addresses.
+        #
+        # Binds:    tcp://:PORT  → loopback (::1 if IPv6 available, else 127.0.0.1)
+        #           tcp://*:PORT → 0.0.0.0 (all interfaces, IPv4)
+        #
+        # Connects: tcp://:PORT  → localhost (Happy Eyeballs)
+        #           tcp://*:PORT → localhost
+        loopback          = self.class.loopback_bind_host
+        normalize_bind    = ->(url) { url.sub(%r{\Atcp://\*:}, "tcp://0.0.0.0:").sub(%r{\Atcp://:}, "tcp://#{loopback}:") }
+        normalize_connect = ->(url) { url.sub(%r{\Atcp://(\*|):}, "tcp://localhost:") }
+        normalize_ep      = ->(ep)  { Endpoint.new(ep.bind? ? normalize_bind.call(ep.url) : normalize_connect.call(ep.url), ep.bind?) }
+        opts[:binds].map!(&normalize_bind)
+        opts[:connects].map!(&normalize_connect)
         opts[:endpoints].map!(&normalize_ep)
         opts[:in_endpoints].map!(&normalize_ep)
         opts[:out_endpoints].map!(&normalize_ep)
@@ -379,6 +390,20 @@ module NNQ
         when /\A\d+\z/       then str.to_i
         else
           abort "invalid byte size: #{str} (use e.g. 4096, 4K, 1M, 2G)"
+        end
+      end
+
+
+      # Returns the loopback address for bind normalization.
+      # Prefers IPv6 loopback ([::1]) when the host has at least one
+      # non-loopback, non-link-local IPv6 address, otherwise 127.0.0.1.
+      def self.loopback_bind_host
+        @loopback_bind_host ||= begin
+          has_ipv6 = ::Socket.getifaddrs.any? { |ifa|
+            addr = ifa.addr
+            addr&.ipv6? && !addr.ipv6_loopback? && !addr.ipv6_linklocal?
+          }
+          has_ipv6 ? "[::1]" : "127.0.0.1"
         end
       end
 

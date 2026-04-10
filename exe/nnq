@@ -2,5 +2,9 @@
 # frozen_string_literal: true
 Warning[:experimental] = false
 
+if !ENV["RUBYOPT"] && defined?(RubyVM::YJIT) && !RubyVM::YJIT.enabled?
+  RubyVM::YJIT.enable
+end
+
 require "nnq/cli"
 NNQ::CLI.run

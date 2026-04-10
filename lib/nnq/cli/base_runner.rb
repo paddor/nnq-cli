@@ -69,7 +69,7 @@ module NNQ
 
 
       def attach_endpoints
-        SocketSetup.attach(@sock, config, verbose: config.verbose >= 1)
+        SocketSetup.attach(@sock, config, verbose: config.verbose)
       end
 
 
@@ -412,19 +412,12 @@ module NNQ
 
       # -vv: log connect/disconnect/retry/timeout events via Socket#monitor
       # -vvv: also log message sent/received traces
+      # -vvvv: prepend ISO8601 timestamps
       def start_event_monitor
         verbose = config.verbose >= 3
+        v = config.verbose
         @sock.monitor(verbose: verbose) do |event|
-          case event.type
-          when :message_sent
-            $stderr.write("nnq: >> #{Formatter.preview([event.detail[:body]])}\n")
-          when :message_received
-            $stderr.write("nnq: << #{Formatter.preview([event.detail[:body]])}\n")
-          else
-            ep = event.endpoint ? " #{event.endpoint}" : ""
-            detail = event.detail ? " #{event.detail}" : ""
-            $stderr.write("nnq: #{event.type}#{ep}#{detail}\n")
-          end
+          CLI::Term.write_event(event, v)
         end
       end
     end

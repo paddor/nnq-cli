@@ -37,12 +37,10 @@ module NNQ
 
 
       def setup_sockets
-        @pull = NNQ::PULL.new(linger: @config.linger)
-        @push = NNQ::PUSH.new(linger: @config.linger, send_hwm: @config.send_hwm || PipeRunner::PIPE_HWM)
-        NNQ::CLI::SocketSetup.apply_options(@pull, @config)
-        NNQ::CLI::SocketSetup.apply_options(@push, @config)
-        NNQ::CLI::SocketSetup.attach_endpoints(@pull, @in_eps, verbose: false)
-        NNQ::CLI::SocketSetup.attach_endpoints(@push, @out_eps, verbose: false)
+        @pull = NNQ::CLI::SocketSetup.build(NNQ::PULL, @config)
+        @push = NNQ::CLI::SocketSetup.build(NNQ::PUSH, @config)
+        NNQ::CLI::SocketSetup.attach_endpoints(@pull, @in_eps, verbose: 0)
+        NNQ::CLI::SocketSetup.attach_endpoints(@push, @out_eps, verbose: 0)
       end
 
 

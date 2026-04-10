@@ -223,7 +223,8 @@ describe "NNQ::CLI::CliParser.parse" do
 
   it "collects multiple binds" do
     opts = NNQ::CLI::CliParser.parse(["pull", "-b", "tcp://:1", "-b", "tcp://:2"])
-    assert_equal ["tcp://localhost:1", "tcp://localhost:2"], opts[:binds]
+    loopback = NNQ::CLI::CliParser.loopback_bind_host
+    assert_equal ["tcp://#{loopback}:1", "tcp://#{loopback}:2"], opts[:binds]
   end
 
   it "expands tcp://*:PORT to 0.0.0.0" do

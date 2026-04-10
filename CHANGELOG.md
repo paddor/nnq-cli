@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- **`NNQ::CLI::Term` module** — consolidates verbose log formatting
+  (timestamps at `-vvvv`, monitor events, endpoint attach lines) into a
+  stateless module. Replaces four duplicated inline formatting blocks
+  across BaseRunner, PipeRunner, PipeWorker, and SocketSetup.
+- **Default HWM → 64** — down from 100. 64 matches the send pump's
+  per-fairness-batch limit (one batch exactly fills a full queue).
+  Pipe sockets no longer use a separate `PIPE_HWM = 16`; they go
+  through `SocketSetup.build` like every other socket type.
+- **Pipe: drop peer wait unless `--timeout`** — without `--timeout`,
+  `PULL#receive` blocks naturally and `PUSH` buffers up to `send_hwm`.
+  Only wait for peers in fail-fast mode.
+- **Endpoint normalization** — binds: `tcp://:PORT` normalizes to
+  loopback (`[::1]` on IPv6-capable hosts, `127.0.0.1` otherwise);
+  `tcp://*:PORT` normalizes to `0.0.0.0`. Connects: both `tcp://:PORT`
+  and `tcp://*:PORT` normalize to `tcp://localhost:PORT` (preserving
+  Happy Eyeballs).
+- **YJIT by default** — `exe/nnq` calls `RubyVM::YJIT.enable` before
+  loading the CLI (skipped if `RUBYOPT` is set, interpreter lacks YJIT,
+  or YJIT is already on).
+- **Consistent `nnq:` prefix** on all attach and event log lines.
+- **`-vvvv` timestamps** — ISO8601 UTC with µs precision.
+
 ## 0.1.0 — 2026-04-09
 
 Initial release — NNQ command-line tool, sister of omq-cli for the SP

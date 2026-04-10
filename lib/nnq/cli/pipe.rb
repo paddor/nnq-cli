@@ -5,11 +5,6 @@ module NNQ
     # Runner for the virtual "pipe" socket type (PULL -> eval -> PUSH).
     # Supports sequential and parallel (Ractor-based) processing modes.
     class PipeRunner
-      # Default HWM for pipe sockets when the user hasn't set one.
-      # Much lower than the socket default to bound memory with large
-      # messages in pipeline stages.
-      PIPE_HWM = 16
-
       # @return [Config] frozen CLI configuration
       attr_reader :config
 
@@ -57,19 +52,7 @@ module NNQ
         compile_expr
         @sock = @pull  # for eval instance_exec
         start_event_monitors if config.verbose >= 2
-        wait_body = proc do
-          Async::Barrier.new.tap do |barrier|
-            barrier.async(annotation: "wait push peer") { @push.peer_connected.wait }
-            barrier.async(annotation: "wait pull peer") { @pull.peer_connected.wait }
-            barrier.wait
-          end
-        end
-
-        if config.timeout
-          Fiber.scheduler.with_timeout(config.timeout, &wait_body)
-        else
-          wait_body.call
-        end
+        wait_for_peers_with_timeout if config.timeout
         setup_sequential_transient(task)
         @sock.instance_exec(&@recv_begin_proc) if @recv_begin_proc
         sequential_message_loop
@@ -81,13 +64,25 @@ module NNQ
 
 
       def build_pull_push(in_eps, out_eps)
-        pull = NNQ::PULL.new(linger: config.linger)
-        push = NNQ::PUSH.new(linger: config.linger, send_hwm: config.send_hwm || PIPE_HWM)
-        SocketSetup.apply_options(pull, config)
-        SocketSetup.apply_options(push, config)
-        SocketSetup.attach_endpoints(pull, in_eps, verbose: config.verbose >= 1)
-        SocketSetup.attach_endpoints(push, out_eps, verbose: config.verbose >= 1)
+        pull = SocketSetup.build(NNQ::PULL, config)
+        push = SocketSetup.build(NNQ::PUSH, config)
+        SocketSetup.attach_endpoints(pull, in_eps, verbose: config.verbose)
+        SocketSetup.attach_endpoints(push, out_eps, verbose: config.verbose)
         [pull, push]
+      end
+
+
+      # With --timeout set, fail fast if peers never show up. Without
+      # it, there's no point waiting: PULL#receive blocks naturally
+      # and PUSH buffers up to send_hwm when no peer is present.
+      def wait_for_peers_with_timeout
+        Fiber.scheduler.with_timeout(config.timeout) do
+          Async::Barrier.new.tap do |barrier|
+            barrier.async(annotation: "wait push peer") { @push.peer_connected.wait }
+            barrier.async(annotation: "wait pull peer") { @pull.peer_connected.wait }
+            barrier.wait
+          end
+        end
       end
 
 
@@ -189,18 +184,10 @@ module NNQ
 
       def start_event_monitors
         verbose = config.verbose >= 3
+        v = config.verbose
         [@pull, @push].each do |sock|
           sock.monitor(verbose: verbose) do |event|
-            case event.type
-            when :message_sent
-              $stderr.write("nnq: >> #{Formatter.preview([event.detail[:body]])}\n")
-            when :message_received
-              $stderr.write("nnq: << #{Formatter.preview([event.detail[:body]])}\n")
-            else
-              ep = event.endpoint ? " #{event.endpoint}" : ""
-              detail = event.detail ? " #{event.detail}" : ""
-              $stderr.write("nnq: #{event.type}#{ep}#{detail}\n")
-            end
+            CLI::Term.write_event(event, v)
           end
         end
       end
