@@ -5,14 +5,15 @@ module NNQ
     # Template runner base class for all socket-type CLI runners.
     # Subclasses override {#run_loop} to implement socket-specific behaviour.
     #
-    # nnq carries one String body per message (no multipart). The runner
-    # protocol wraps it in a 1-element Array internally so that eval
-    # expressions using `$F`/`$_` work the same way as in omq-cli, and
-    # unwraps to a bare String at the send boundary.
+    # nnq carries one String body per message (no multipart).
+    #
     class BaseRunner
       # @return [Config] frozen CLI configuration
+      attr_reader :config
+
+
       # @return [Object] the NNQ socket instance
-      attr_reader :config, :sock
+      attr_reader :sock
 
 
       # @param config [Config] frozen CLI configuration
@@ -145,6 +146,7 @@ module NNQ
       # latecomers finish their handshake before we start sending.
       def apply_grace_period
         return unless config.binds.any? || config.connects.size > 1
+
         ri = @sock.options.reconnect_interval
         sleep(ri.is_a?(Range) ? ri.begin : ri)
       end
@@ -163,7 +165,9 @@ module NNQ
 
       def run_send_logic
         n = config.count
-        sleep(config.delay) if config.delay
+
+        sleep config.delay if config.delay
+
         if config.interval
           run_interval_send(n)
         elsif config.data || config.file
@@ -189,21 +193,30 @@ module NNQ
 
       def run_interval_send(n)
         i = send_tick
-        return if @send_tick_eof || (n && n > 0 && i >= n)
+
+        if @send_tick_eof || (n && n > 0 && i >= n)
+          return
+        end
+
         Async::Loop.quantized(interval: config.interval) do
           i += send_tick
-          break if @send_tick_eof || (n && n > 0 && i >= n)
+
+          if @send_tick_eof || (n && n > 0 && i >= n)
+            break
+          end
         end
       end
 
 
       def run_stdin_send(n)
         i = 0
+
         loop do
-          msg = read_next
-          break unless msg
+          msg = read_next or break
           msg = eval_send_expr(msg)
+
           send_msg(msg) if msg
+
           i += 1
           break if n && n > 0 && i >= n
         end
@@ -212,6 +225,7 @@ module NNQ
 
       def send_tick
         raw = read_next_or_nil
+
         if raw.nil?
           if @send_eval_proc && !@stdin_ready
             # Pure generator mode: no stdin, eval produces output from nothing.
@@ -219,9 +233,11 @@ module NNQ
             send_msg(msg) if msg
             return 1
           end
+
           @send_tick_eof = true
           return 0
         end
+
         msg = eval_send_expr(raw)
         send_msg(msg) if msg
         1
@@ -231,14 +247,16 @@ module NNQ
       def run_recv_logic
         n = config.count
         i = 0
+
         if config.interval
           run_interval_recv(n)
         else
           loop do
-            msg = recv_msg
-            break if msg.nil?
+            msg = recv_msg or break
             msg = eval_recv_expr(msg)
+
             output(msg)
+
             i += 1
             break if n && n > 0 && i >= n
           end
@@ -248,21 +266,28 @@ module NNQ
 
       def run_interval_recv(n)
         i = recv_tick
+
         return if i == 0
         return if n && n > 0 && i >= n
+
         Async::Loop.quantized(interval: config.interval) do
           i += recv_tick
-          break if @recv_tick_eof || (n && n > 0 && i >= n)
+
+          if @recv_tick_eof || (n && n > 0 && i >= n)
+            break
+          end
         end
       end
 
 
       def recv_tick
         msg = recv_msg
+
         if msg.nil?
           @recv_tick_eof = true
           return 0
         end
+
         msg = eval_recv_expr(msg)
         output(msg)
         1
@@ -286,22 +311,32 @@ module NNQ
       # -- Message I/O -------------------------------------------------
 
 
-      # msg: 1-element Array. nnq sockets take a bare String body.
+      # @param msg [String]
+      #
       def send_msg(msg)
-        return if msg.empty?
-        body = config.format == :marshal ? Marshal.dump(msg.first) : msg.first
+        body = msg
+
+        case config.format
+        when :marshal
+          body = Marshal.dump(msg)
+        end
+
         @sock.send(body)
         transient_ready!
       end
 
 
-      # @return [Array<String>, nil] 1-element Array (body), or nil on close.
+      # @return [String, nil] message body, or nil on close.
       def recv_msg
-        raw = @sock.receive
-        return nil if raw.nil?
-        body = config.format == :marshal ? Marshal.load(raw) : raw
+        msg = @sock.receive or return
+
+        case config.format
+        when :marshal
+          msg = Marshal.load msg
+        end
+
         transient_ready!
-        [body]
+        msg
       end
 
 
@@ -328,7 +363,7 @@ module NNQ
           @fmt.decode_marshal($stdin)
         when :raw
           data = $stdin.read
-          data.nil? || data.empty? ? nil : [data]
+          data.nil? || data.empty? ? nil : data
         else
           line = $stdin.gets
           line.nil? ? nil : @fmt.decode(line)
@@ -359,6 +394,7 @@ module NNQ
 
       def output(msg)
         return if config.quiet || msg.nil?
+
         $stdout.write(@fmt.encode(msg))
         $stdout.flush
       end
@@ -416,9 +452,11 @@ module NNQ
         title = ["nnq", config.type_name]
         title << (config.compress == :balanced ? "-Z" : "-z") if config.compress
         title << "-P#{config.parallel}" if config.parallel
+
         eps.each do |ep|
           title << (ep.respond_to?(:url) ? ep.url : ep.to_s)
         end
+
         Process.setproctitle(title.join(" "))
       end
 
@@ -428,6 +466,7 @@ module NNQ
 
       def log(msg)
         return unless config.verbose >= 1
+
         $stderr.write("#{Term.log_prefix(config.verbose)}nnq: #{msg}\n")
       end
 
@@ -437,11 +476,13 @@ module NNQ
       # -vvvv: prepend ISO8601 timestamps
       def start_event_monitor
         verbose = config.verbose >= 3
-        v = config.verbose
+        v       = config.verbose
+
         @sock.monitor(verbose: verbose) do |event|
           CLI::Term.write_event(event, v)
         end
       end
+
     end
   end
 end

@@ -51,7 +51,7 @@ describe "NNQ::CLI::CliParser.validate!" do
 
   it "rejects --recv-eval on send-only sockets" do
     %w[push pub].each do |type|
-      opts = base_opts(type).merge(recv_expr: "$_")
+      opts = base_opts(type).merge(recv_expr: "it")
       assert_raises(SystemExit, "expected --recv-eval to be rejected for #{type}") {
         quietly { NNQ::CLI::CliParser.validate!(opts) }
       }
@@ -60,7 +60,7 @@ describe "NNQ::CLI::CliParser.validate!" do
 
   it "rejects --send-eval on recv-only sockets" do
     %w[pull sub].each do |type|
-      opts = base_opts(type).merge(send_expr: "$_")
+      opts = base_opts(type).merge(send_expr: "it")
       assert_raises(SystemExit, "expected --send-eval to be rejected for #{type}") {
         quietly { NNQ::CLI::CliParser.validate!(opts) }
       }
@@ -68,25 +68,25 @@ describe "NNQ::CLI::CliParser.validate!" do
   end
 
   it "rejects --send-eval on REP" do
-    opts = base_opts("rep").merge(send_expr: "$_")
+    opts = base_opts("rep").merge(send_expr: "it")
     assert_raises(SystemExit) { quietly { NNQ::CLI::CliParser.validate!(opts) } }
   end
 
   it "allows --recv-eval on recv-only sockets" do
     %w[pull sub].each do |type|
-      NNQ::CLI::CliParser.validate!(base_opts(type).merge(recv_expr: "$_"))
+      NNQ::CLI::CliParser.validate!(base_opts(type).merge(recv_expr: "it"))
     end
   end
 
   it "allows --send-eval on send-only sockets" do
     %w[push pub].each do |type|
-      NNQ::CLI::CliParser.validate!(base_opts(type).merge(send_expr: "$_"))
+      NNQ::CLI::CliParser.validate!(base_opts(type).merge(send_expr: "it"))
     end
   end
 
   it "allows both --send-eval and --recv-eval on bidirectional sockets" do
     %w[req pair].each do |type|
-      NNQ::CLI::CliParser.validate!(base_opts(type).merge(send_expr: "$_", recv_expr: "$_"))
+      NNQ::CLI::CliParser.validate!(base_opts(type).merge(send_expr: "it", recv_expr: "it"))
     end
   end
 
@@ -240,7 +240,6 @@ describe "NNQ::CLI::CliParser.parse" do
   it "parses format flags" do
     assert_equal :quoted, NNQ::CLI::CliParser.parse(["req", "-c", "tcp://x:1", "-Q"])[:format]
     assert_equal :raw,    NNQ::CLI::CliParser.parse(["req", "-c", "tcp://x:1", "--raw"])[:format]
-    assert_equal :jsonl,  NNQ::CLI::CliParser.parse(["req", "-c", "tcp://x:1", "-J"])[:format]
   end
 
   it "parses --subscribe (repeatable)" do
@@ -267,31 +266,31 @@ describe "NNQ::CLI::CliParser.parse" do
   end
 
   it "parses -e as --recv-eval" do
-    opts = NNQ::CLI::CliParser.parse(["pull", "-b", "tcp://:1", "-e", "$_.upcase"])
-    assert_equal "$_.upcase", opts[:recv_expr]
+    opts = NNQ::CLI::CliParser.parse(["pull", "-b", "tcp://:1", "-e", "it.upcase"])
+    assert_equal "it.upcase", opts[:recv_expr]
     assert_nil opts[:send_expr]
   end
 
   it "parses -E as --send-eval" do
-    opts = NNQ::CLI::CliParser.parse(["push", "-c", "tcp://x:1", "-E", "$_.upcase"])
-    assert_equal "$_.upcase", opts[:send_expr]
+    opts = NNQ::CLI::CliParser.parse(["push", "-c", "tcp://x:1", "-E", "it.upcase"])
+    assert_equal "it.upcase", opts[:send_expr]
     assert_nil opts[:recv_expr]
   end
 
   it "parses --recv-eval long form" do
-    opts = NNQ::CLI::CliParser.parse(["pull", "-b", "tcp://:1", "--recv-eval", "$_"])
-    assert_equal "$_", opts[:recv_expr]
+    opts = NNQ::CLI::CliParser.parse(["pull", "-b", "tcp://:1", "--recv-eval", "it"])
+    assert_equal "it", opts[:recv_expr]
   end
 
   it "parses --send-eval long form" do
-    opts = NNQ::CLI::CliParser.parse(["push", "-c", "tcp://x:1", "--send-eval", "$_"])
-    assert_equal "$_", opts[:send_expr]
+    opts = NNQ::CLI::CliParser.parse(["push", "-c", "tcp://x:1", "--send-eval", "it"])
+    assert_equal "it", opts[:send_expr]
   end
 
   it "parses both -e and -E together" do
-    opts = NNQ::CLI::CliParser.parse(["req", "-c", "tcp://x:1", "-E", "build($_)", "-e", "parse($_)"])
-    assert_equal "build($_)", opts[:send_expr]
-    assert_equal "parse($_)", opts[:recv_expr]
+    opts = NNQ::CLI::CliParser.parse(["req", "-c", "tcp://x:1", "-E", "build(it)", "-e", "parse(it)"])
+    assert_equal "build(it)", opts[:send_expr]
+    assert_equal "parse(it)", opts[:recv_expr]
   end
 
   it "parses --in/--out modal endpoints for pipe" do

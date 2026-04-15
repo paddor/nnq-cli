@@ -105,11 +105,9 @@ module NNQ
         loop do
           body = @pull.receive
           break if body.nil?
-          msg = eval_recv_expr([body])
+          msg = eval_recv_expr(body)
 
-          if msg && !msg.empty?
-            @push.send(msg.first)
-          end
+          @push.send(msg) if msg
 
           # Yield after send so send-pump fibers can drain the queue
           # before the next message is enqueued. Without this, one pump

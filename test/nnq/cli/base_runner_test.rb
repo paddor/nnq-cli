@@ -23,7 +23,7 @@ describe "output" do
   it "prints the message body" do
     out      = StringIO.new
     $stdout  = out
-    @runner.send(:output, ["hello"])
+    @runner.send(:output, "hello")
     $stdout  = STDOUT
     assert_equal "hello\n", out.string
   end

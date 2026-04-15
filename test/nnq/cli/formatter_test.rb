@@ -10,28 +10,28 @@ describe NNQ::CLI::Formatter do
     before { @fmt = NNQ::CLI::Formatter.new(:ascii) }
 
     it "encodes single-body message" do
-      assert_equal "hello\n", @fmt.encode(["hello"])
+      assert_equal "hello\n", @fmt.encode("hello")
     end
 
     it "replaces non-printable bytes with dots" do
-      assert_equal "hel.o\n", @fmt.encode(["hel\x00o"])
-      assert_equal "ab..cd\n", @fmt.encode(["ab\x01\x02cd"])
+      assert_equal "hel.o\n", @fmt.encode("hel\x00o")
+      assert_equal "ab..cd\n", @fmt.encode("ab\x01\x02cd")
     end
 
     it "preserves tabs in output" do
-      assert_equal "a\tb\n", @fmt.encode(["a\tb"])
+      assert_equal "a\tb\n", @fmt.encode("a\tb")
     end
 
     it "encodes empty message" do
-      assert_equal "\n", @fmt.encode([""])
+      assert_equal "\n", @fmt.encode("")
     end
 
-    it "decodes into 1-element array" do
-      assert_equal ["hello"], @fmt.decode("hello\n")
+    it "decodes into a body string" do
+      assert_equal "hello", @fmt.decode("hello\n")
     end
 
     it "round-trips printable text" do
-      msg = ["hello"]
+      msg = "hello"
       assert_equal msg, @fmt.decode(@fmt.encode(msg))
     end
   end
@@ -42,58 +42,58 @@ describe NNQ::CLI::Formatter do
     before { @fmt = NNQ::CLI::Formatter.new(:quoted) }
 
     it "encodes printable text unchanged" do
-      assert_equal "hello world\n", @fmt.encode(["hello world"])
+      assert_equal "hello world\n", @fmt.encode("hello world")
     end
 
     it "escapes newlines" do
-      assert_equal "line1\\nline2\n", @fmt.encode(["line1\nline2"])
+      assert_equal "line1\\nline2\n", @fmt.encode("line1\nline2")
     end
 
     it "escapes carriage returns" do
-      assert_equal "a\\rb\n", @fmt.encode(["a\rb"])
+      assert_equal "a\\rb\n", @fmt.encode("a\rb")
     end
 
     it "escapes tabs" do
-      assert_equal "a\\tb\n", @fmt.encode(["a\tb"])
+      assert_equal "a\\tb\n", @fmt.encode("a\tb")
     end
 
     it "escapes backslashes" do
-      assert_equal "a\\\\b\n", @fmt.encode(["a\\b"])
+      assert_equal "a\\\\b\n", @fmt.encode("a\\b")
     end
 
     it "hex-escapes other non-printable bytes" do
-      assert_equal "\\x00\\x01\\x7F\n", @fmt.encode(["\x00\x01\x7f"])
+      assert_equal "\\x00\\x01\\x7F\n", @fmt.encode("\x00\x01\x7f")
     end
 
     it "decodes escaped newlines" do
-      assert_equal ["line1\nline2"], @fmt.decode("line1\\nline2\n")
+      assert_equal "line1\nline2", @fmt.decode("line1\\nline2\n")
     end
 
     it "decodes escaped carriage returns" do
-      assert_equal ["a\rb"], @fmt.decode("a\\rb\n")
+      assert_equal "a\rb", @fmt.decode("a\\rb\n")
     end
 
     it "decodes escaped tabs" do
-      assert_equal ["a\tb"], @fmt.decode("a\\tb\n")
+      assert_equal "a\tb", @fmt.decode("a\\tb\n")
     end
 
     it "decodes escaped backslashes" do
-      assert_equal ["a\\b"], @fmt.decode("a\\\\b\n")
+      assert_equal "a\\b", @fmt.decode("a\\\\b\n")
     end
 
     it "decodes hex escapes" do
-      assert_equal ["\x00\xff".b], @fmt.decode("\\x00\\xFF\n").map(&:b)
+      assert_equal "\x00\xff".b, @fmt.decode("\\x00\\xFF\n").b
     end
 
     it "round-trips text with special characters" do
-      msg = ["line1\nline2\ttab\\back"]
+      msg = "line1\nline2\ttab\\back"
       assert_equal msg, @fmt.decode(@fmt.encode(msg))
     end
 
     it "round-trips binary data" do
       binary  = (0..255).map(&:chr).join.b
-      encoded = @fmt.encode([binary])
-      decoded = @fmt.decode(encoded).first.b
+      encoded = @fmt.encode(binary)
+      decoded = @fmt.decode(encoded).b
       assert_equal binary, decoded
     end
   end
@@ -104,52 +104,20 @@ describe NNQ::CLI::Formatter do
     before { @fmt = NNQ::CLI::Formatter.new(:raw) }
 
     it "encodes body verbatim" do
-      assert_equal "hello", @fmt.encode(["hello"])
+      assert_equal "hello", @fmt.encode("hello")
     end
 
     it "encodes empty message as empty string" do
-      assert_equal "", @fmt.encode([""])
+      assert_equal "", @fmt.encode("")
     end
 
     it "decodes line unchanged" do
-      assert_equal ["hello\n"], @fmt.decode("hello\n")
+      assert_equal "hello\n", @fmt.decode("hello\n")
     end
 
     it "preserves binary data" do
       binary = "\x00\x01\xff".b
-      assert_equal [binary], @fmt.decode(binary)
-    end
-  end
-
-  # -- JSONL format -------------------------------------------------
-
-  describe "jsonl" do
-    before { @fmt = NNQ::CLI::Formatter.new(:jsonl) }
-
-    it "encodes as JSON array" do
-      assert_equal "[\"hello\"]\n", @fmt.encode(["hello"])
-    end
-
-    it "encodes empty body" do
-      assert_equal "[\"\"]\n", @fmt.encode([""])
-    end
-
-    it "decodes JSON array into 1-element array" do
-      assert_equal ["hello"], @fmt.decode("[\"hello\"]\n")
-    end
-
-    it "drops extra elements from multi-element JSON arrays" do
-      assert_equal ["a"], @fmt.decode("[\"a\",\"b\"]\n")
-    end
-
-    it "round-trips single-body messages" do
-      msg = ["body1"]
-      assert_equal msg, @fmt.decode(@fmt.encode(msg))
-    end
-
-    it "handles special JSON characters" do
-      msg = ["line\nnew\ttab\"quote"]
-      assert_equal msg, @fmt.decode(@fmt.encode(msg))
+      assert_equal binary, @fmt.decode(binary)
     end
   end
 
@@ -158,23 +126,22 @@ describe NNQ::CLI::Formatter do
   describe "msgpack" do
     before { @fmt = NNQ::CLI::Formatter.new(:msgpack) }
 
-    it "encodes as MessagePack array" do
-      encoded = @fmt.encode(["hello"])
-      assert_equal ["hello"], MessagePack.unpack(encoded)
+    it "encodes as MessagePack string" do
+      encoded = @fmt.encode("hello")
+      assert_equal "hello", MessagePack.unpack(encoded)
     end
 
     it "decodes from IO stream" do
-      data   = MessagePack.pack(["hello"])
+      data   = MessagePack.pack("hello")
       io     = StringIO.new(data)
-      result = @fmt.decode_msgpack(io)
-      assert_equal ["hello"], result
+      assert_equal "hello", @fmt.decode_msgpack(io)
     end
 
     it "decodes multiple messages from stream" do
-      data = MessagePack.pack(["msg1"]) + MessagePack.pack(["msg2"])
+      data = MessagePack.pack("msg1") + MessagePack.pack("msg2")
       io   = StringIO.new(data)
-      assert_equal ["msg1"], @fmt.decode_msgpack(io)
-      assert_equal ["msg2"], @fmt.decode_msgpack(io)
+      assert_equal "msg1", @fmt.decode_msgpack(io)
+      assert_equal "msg2", @fmt.decode_msgpack(io)
     end
 
     it "returns nil at EOF" do
@@ -187,20 +154,20 @@ describe NNQ::CLI::Formatter do
 
   describe "preview" do
     it "renders a single printable body" do
-      assert_equal "(3B) foo", NNQ::CLI::Formatter.preview(["foo"])
+      assert_equal "(3B) foo", NNQ::CLI::Formatter.preview("foo")
     end
 
     it "renders an empty body as '' marker" do
-      assert_equal "(0B) ''", NNQ::CLI::Formatter.preview([""])
+      assert_equal "(0B) ''", NNQ::CLI::Formatter.preview("")
     end
 
     it "truncates long printable bodies" do
-      preview = NNQ::CLI::Formatter.preview(["abcdefghijklmnop"])
+      preview = NNQ::CLI::Formatter.preview("abcdefghijklmnop")
       assert_equal "(16B) abcdefghijkl...", preview
     end
 
     it "shows byte length for binary bodies" do
-      assert_equal "(4B) [4B]", NNQ::CLI::Formatter.preview(["\x00\x01\x02\x03"])
+      assert_equal "(4B) [4B]", NNQ::CLI::Formatter.preview("\x00\x01\x02\x03")
     end
   end
 end

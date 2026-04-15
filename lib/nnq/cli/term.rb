@@ -36,9 +36,9 @@ module NNQ
         prefix = log_prefix(verbose)
         case event.type
         when :message_sent
-          "#{prefix}nnq: >> #{Formatter.preview([event.detail[:body]])}"
+          "#{prefix}nnq: >> #{Formatter.preview(event.detail[:body])}"
         when :message_received
-          "#{prefix}nnq: << #{Formatter.preview([event.detail[:body]])}"
+          "#{prefix}nnq: << #{Formatter.preview(event.detail[:body])}"
         else
           ep     = event.endpoint ? " #{event.endpoint}" : ""
           detail = event.detail ? " #{event.detail}" : ""

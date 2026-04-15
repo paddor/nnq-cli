@@ -8,8 +8,10 @@ module NNQ
     #
     # One instance per direction (send or recv).
     #
-    # nnq has no multipart, so `$F` is always a 1-element array and `$_`
-    # is the body string.
+    # The expression sees the message body via the default block
+    # variable `it`, or callers can declare an explicit parameter with
+    # block-literal syntax: `-e '|msg| msg.upcase'` compiles to
+    # `proc { |msg| msg.upcase }`.
     #
     class ExpressionEvaluator
       attr_reader :begin_proc, :end_proc, :eval_proc
@@ -28,34 +30,30 @@ module NNQ
 
         if src
           expr, begin_body, end_body = extract_blocks(src)
-          @begin_proc = eval("proc { #{begin_body} }") if begin_body # rubocop:disable Security/Eval
-          @end_proc   = eval("proc { #{end_body} }")   if end_body   # rubocop:disable Security/Eval
+          @begin_proc = eval("proc { #{begin_body} }") if begin_body
+          @end_proc   = eval("proc { #{end_body} }")   if end_body
+
           if expr && !expr.strip.empty?
-            @eval_proc = eval("proc { $_ = $F&.first; #{expr} }") # rubocop:disable Security/Eval
+            @eval_proc = eval("proc { #{expr} }")
           end
         elsif fallback_proc
-          @eval_proc = proc { |msg|
-            body = msg&.first
-            $_ = body
-            fallback_proc.call(body)
-          }
+          @eval_proc = proc { |msg| fallback_proc.call(msg) }
         end
       end
 
 
       # Runs the eval proc against +msg+ using +context+ as self.
-      # Returns the normalised result Array, nil (filter/skip), or SENT.
+      # Returns the normalised result (as String), nil (filter/skip), or SENT.
+      #
       def call(msg, context)
         return msg unless @eval_proc
 
-        $F     = msg
         result = context.instance_exec(msg, &@eval_proc)
         return nil  if result.nil?
         return SENT if result.equal?(context)
-        return [result] if @format == :marshal
+        return result if @format == :marshal
 
-        result = result.is_a?(Array) ? result.first(1) : [result]
-        result.map!(&:to_s)
+        result.to_s
       rescue => e
         $stderr.puts "nnq: eval error: #{e.message} (#{e.class})"
         exit 3
@@ -66,8 +64,7 @@ module NNQ
       # Used inside Ractor worker blocks.
       def self.normalize_result(result)
         return nil if result.nil?
-        result = result.is_a?(Array) ? result.first(1) : [result]
-        result.map!(&:to_s)
+        result.to_s
       end
 
 
@@ -77,52 +74,34 @@ module NNQ
       def self.compile_inside_ractor(src)
         return [nil, nil, nil] unless src
 
-        extract = ->(expr, kw) {
-          s = expr.index(/#{kw}\s*\{/)
-          return [expr, nil] unless s
-          ci = expr.index("{", s)
-          depth = 1
-          j = ci + 1
-          while j < expr.length && depth > 0
-            depth += 1 if expr[j] == "{"
-            depth -= 1 if expr[j] == "}"
-            j += 1
-          end
-          [expr[0...s] + expr[j..], expr[(ci + 1)..(j - 2)]]
-        }
+        expr, begin_body = extract_block(src,  "BEGIN")
+        expr, end_body   = extract_block(expr, "END")
 
-        expr, begin_body = extract.(src, "BEGIN")
-        expr, end_body   = extract.(expr, "END")
-
-        begin_proc = eval("proc { #{begin_body} }") if begin_body # rubocop:disable Security/Eval
-        end_proc   = eval("proc { #{end_body} }")   if end_body   # rubocop:disable Security/Eval
+        begin_proc = eval("proc { #{begin_body} }") if begin_body
+        end_proc   = eval("proc { #{end_body} }")   if end_body
         eval_proc  = nil
+
         if expr && !expr.strip.empty?
-          ractor_expr = expr.gsub(/\$F\b/, "__F")
-          eval_proc   = eval("proc { |__F| $_ = __F&.first; #{ractor_expr} }") # rubocop:disable Security/Eval
+          eval_proc = eval("proc { #{expr} }")
         end
 
         [begin_proc, end_proc, eval_proc]
       end
 
 
-      private
-
-
-      def extract_blocks(expr)
-        expr, begin_body = extract_block(expr, "BEGIN")
-        expr, end_body   = extract_block(expr, "END")
-        [expr, begin_body, end_body]
-      end
-
-
-      def extract_block(expr, keyword)
-        start = expr.index(/#{keyword}\s*\{/)
-        return [expr, nil] unless start
+      # Strips a +BEGIN {...}+ or +END {...}+ block from +expr+ and
+      # returns +[trimmed_expr, block_body_or_nil]+. Brace-matched scan,
+      # so nested `{}` inside the block body are handled. Shared by
+      # instance and Ractor compile paths, so must be a class method
+      # (Ractors cannot call back into instance state).
+      #
+      def self.extract_block(expr, keyword)
+        start = expr.index(/#{keyword}\s*\{/) or return [expr, nil]
 
         i     = expr.index("{", start)
         depth = 1
         j     = i + 1
+
         while j < expr.length && depth > 0
           case expr[j]
           when "{"
@@ -130,6 +109,7 @@ module NNQ
           when "}"
             depth -= 1
           end
+
           j += 1
         end
 
@@ -137,6 +117,17 @@ module NNQ
         trimmed = expr[0...start] + expr[j..]
         [trimmed, body]
       end
+
+
+      private
+
+
+      def extract_blocks(expr)
+        expr, begin_body = self.class.extract_block(expr, "BEGIN")
+        expr, end_body   = self.class.extract_block(expr, "END")
+        [expr, begin_body, end_body]
+      end
+
     end
   end
 end

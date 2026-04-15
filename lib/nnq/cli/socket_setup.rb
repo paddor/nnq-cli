@@ -10,11 +10,13 @@ module NNQ
       # (one batch exactly fills a full queue).
       DEFAULT_HWM = 64
 
+
       # Default max inbound message size (1 MiB) so a misconfigured or
       # malicious peer can't force arbitrary memory allocation on a
       # terminal user. Users can raise it with --recv-maxsz N, or
       # disable it entirely with --recv-maxsz 0.
       DEFAULT_RECV_MAXSZ = 1 << 20
+
 
       # Apply post-construction socket options from +config+ to +sock+.
       # send_hwm and linger are construction-time kwargs (see {.build});
@@ -24,12 +26,15 @@ module NNQ
         sock.options.read_timeout       = config.timeout       if config.timeout
         sock.options.write_timeout      = config.timeout       if config.timeout
         sock.options.reconnect_interval = config.reconnect_ivl if config.reconnect_ivl
-        sock.options.max_message_size =
-          case config.recv_maxsz
-          when nil then DEFAULT_RECV_MAXSZ
-          when 0   then nil
-          else          config.recv_maxsz
-          end
+
+        case config.recv_maxsz
+        when nil
+          sock.options.max_message_size = DEFAULT_RECV_MAXSZ
+        when 0  
+          sock.options.max_message_size = nil
+        else
+          config.recv_maxsz
+        end
       end
 
 
@@ -38,10 +43,10 @@ module NNQ
       # (send_hwm is captured during routing init and can't be changed
       # after the fact), so we pass them there.
       def self.build(klass, config)
-        sock = klass.new(
-          linger:   config.linger,
-          send_hwm: config.send_hwm || DEFAULT_HWM,
-        )
+        linger   = config.linger
+        send_hwm = config.send_hwm || DEFAULT_HWM
+        sock     = klass.new(linger:, send_hwm:)
+
         apply_options(sock, config)
         sock
       end
@@ -54,6 +59,7 @@ module NNQ
           sock.bind(url)
           CLI::Term.write_attach(:bind, sock.last_endpoint, verbose) if verbose >= 1
         end
+
         config.connects.each do |url|
           sock.connect(url)
           CLI::Term.write_attach(:connect, url, verbose) if verbose >= 1
@@ -98,6 +104,7 @@ module NNQ
         prefixes = config.subscribes.empty? ? [""] : config.subscribes
         prefixes.each { |p| sock.subscribe(p) }
       end
+
     end
   end
 end

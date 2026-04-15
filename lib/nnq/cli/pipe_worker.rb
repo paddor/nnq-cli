@@ -65,9 +65,9 @@ module NNQ
       def format_event(event)
         case event.type
         when :message_sent
-          "nnq: >> #{NNQ::CLI::Formatter.preview([event.detail[:body]])}"
+          "nnq: >> #{NNQ::CLI::Formatter.preview(event.detail[:body])}"
         when :message_received
-          "nnq: << #{NNQ::CLI::Formatter.preview([event.detail[:body]])}"
+          "nnq: << #{NNQ::CLI::Formatter.preview(event.detail[:body])}"
         else
           ep     = event.endpoint ? " #{event.endpoint}" : ""
           detail = event.detail ? " #{event.detail}" : ""
@@ -100,11 +100,9 @@ module NNQ
             body = @pull.receive
             break if body.nil?
             msg = NNQ::CLI::ExpressionEvaluator.normalize_result(
-              @ctx.instance_exec([body], &@eval_proc)
+              @ctx.instance_exec(body, &@eval_proc)
             )
-            unless msg.nil? || msg.empty?
-              @push.send(msg.first)
-            end
+            @push.send(msg) if msg
             n -= 1 if n && n > 0
             break if n == 0
           end
@@ -127,9 +125,7 @@ module NNQ
         out = NNQ::CLI::ExpressionEvaluator.normalize_result(
           @ctx.instance_exec(&@end_proc)
         )
-        if out && !out.empty?
-          @push.send(out.first)
-        end
+        @push.send(out) if out
       end
     end
   end

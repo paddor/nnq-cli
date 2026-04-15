@@ -7,11 +7,10 @@ module NNQ
     # the socket, not by the formatter.
     #
     # Unlike omq-cli's Formatter, nnq messages are not multipart — one
-    # `String` body per message. The API still accepts/returns a
-    # 1-element array so that `$F`-based eval expressions work the same
-    # way.
+    # `String` body per message. The API takes and returns a plain
+    # `String`.
     class Formatter
-      # @param format [Symbol] wire format (:ascii, :quoted, :raw, :jsonl, :msgpack, :marshal)
+      # @param format [Symbol] wire format (:ascii, :quoted, :raw, :msgpack, :marshal)
       def initialize(format)
         @format = format
       end
@@ -19,45 +18,38 @@ module NNQ
 
       # Encodes a message body into a printable string for output.
       #
-      # @param msg [Array<String>] single-element array (the body)
+      # @param msg [String] message body
       # @return [String] formatted output line
+      #
       def encode(msg)
-        body = msg.first.to_s
         case @format
         when :ascii
-          body.b.gsub(/[^[:print:]\t]/, ".") + "\n"
+          msg.b.gsub(/[^[:print:]\t]/, ".") << "\n"
         when :quoted
-          body.b.dump[1..-2] + "\n"
+          msg.b.dump[1..-2] << "\n"
         when :raw
-          body
-        when :jsonl
-          JSON.generate([body]) + "\n"
+          msg # FIXME: are these really the wire bytes?
         when :msgpack
-          MessagePack.pack([body])
+          MessagePack.pack(msg)
         when :marshal
-          body.inspect + "\n"
+          msg.inspect << "\n"
         end
       end
 
 
-      # Decodes a formatted input line into a 1-element message array.
+      # Decodes a formatted input line into a message body.
       #
       # @param line [String] input line (newline-terminated)
-      # @return [Array<String>] 1-element array
+      # @return [String] message
+      #
       def decode(line)
         case @format
         when :ascii, :marshal
-          [line.chomp]
+          line.chomp
         when :quoted
-          ["\"#{line.chomp}\"".undump]
+          "\"#{line.chomp}\"".undump
         when :raw
-          [line]
-        when :jsonl
-          arr = JSON.parse(line.chomp)
-          unless arr.is_a?(Array) && arr.all? { |e| e.is_a?(String) }
-            abort "JSON Lines input must be an array of strings"
-          end
-          arr.first(1)
+          line
         end
       end
 
@@ -87,10 +79,10 @@ module NNQ
 
       # Formats a message body for human-readable preview (logging).
       #
-      # @param msg [Array<String>] single-element array
+      # @param body [String] message body
       # @return [String] truncated preview
-      def self.preview(msg)
-        body = msg.first.to_s
+      def self.preview(body)
+        body = body.to_s
         "(#{body.bytesize}B) #{preview_body(body)}"
       end
 

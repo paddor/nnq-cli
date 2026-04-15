@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.3.1 — 2026-04-15
+
+- **Messages are single `String`s, not 1-element arrays.** Every
+  runner, the formatter, and the expression evaluator used to wrap
+  each message body in a one-element array as a historical
+  artifact of multipart thinking. That's gone now: `Formatter#pack`/
+  `#unpack` take and return a `String`, `Formatter.preview` takes a
+  `String`, and REQ/REP/SURVEYOR/RESPONDENT/pipe runners pass the
+  body straight through without `.first` or array literals. Fixes
+  an `undefined method 'first' for an instance of String` crash in
+  `ReqRunner#request_and_receive` that was masked by the tests.
+- **`-e` / `-E` expressions use Ruby 3.4's `it` default block
+  variable** (and accept explicit `|msg|` block-parameter syntax
+  via `proc { |msg| ... }`). The old implicit `$_`/`$F` aliasing is
+  gone; expressions are compiled as plain `proc { EXPR }` and
+  evaluated via `instance_exec(msg, &block)`, so `it.upcase` and
+  `|msg| msg.upcase` both work. Cleaner, faster, and no global
+  state.
+- **Requires nnq >= 0.6.1** for the `-vvv` trace fixes — cooked
+  REQ/REP/RESPONDENT now emit `>>` lines and recv previews strip
+  the SP backtrace header so you see the actual payload.
+- **`test/system_test.sh`** — new shell-based system test suite
+  modeled on omq-cli's, covering REQ/REP (basic, `--echo`, `-e`),
+  the ported `-vvv` REQ/REP verbose-trace assertion from omq-cli
+  commit `950890911de078`, PUSH/PULL, PUB/SUB, and the `@name`
+  abstract-namespace shortcut for both `-b` and `-c`.
+
 ## 0.3.0 — 2026-04-15
 
 - **Compression switched from LZ4 to Zstd** via the new

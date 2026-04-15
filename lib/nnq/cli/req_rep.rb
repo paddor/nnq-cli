@@ -31,13 +31,12 @@ module NNQ
 
 
       def request_and_receive(msg)
-        return nil if msg.empty?
-        body = config.format == :marshal ? Marshal.dump(msg.first) : msg.first
+        return nil if msg.nil? || msg.empty?
+        body = config.format == :marshal ? Marshal.dump(msg) : msg
         reply_body = @sock.send_request(body)
         transient_ready!
         return nil if reply_body.nil?
-        reply = config.format == :marshal ? Marshal.load(reply_body) : reply_body
-        [reply]
+        config.format == :marshal ? Marshal.load(reply_body) : reply_body
       end
 
 
@@ -74,7 +73,7 @@ module NNQ
           reply = eval_recv_expr(msg)
           unless reply.equal?(SENT)
             output(reply)
-            send_reply(reply || [""])
+            send_reply(reply || "")
           end
         elsif config.echo
           output(msg)
@@ -92,8 +91,8 @@ module NNQ
 
 
       def send_reply(msg)
-        return if msg.empty?
-        body = config.format == :marshal ? Marshal.dump(msg.first) : msg.first
+        return if msg.nil?
+        body = config.format == :marshal ? Marshal.dump(msg) : msg
         @sock.send_reply(body)
         transient_ready!
       end

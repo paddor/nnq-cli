@@ -16,7 +16,7 @@ module NNQ
           +-----+  "HELLO"    +-----+
 
           # terminal 1: echo server
-          nnq rep --bind tcp://:5555 --recv-eval '$_.upcase'
+          nnq rep --bind tcp://:5555 --recv-eval 'it.upcase'
 
           # terminal 2: send a request
           echo "hello" | nnq req --connect tcp://localhost:5555
@@ -80,22 +80,22 @@ module NNQ
           echo -e "hello\nworld" | nnq push --bind ipc://@work
 
           # terminal 2: worker -- uppercase each message
-          nnq pipe -c ipc://@work -c ipc://@sink -e '$_.upcase'
+          nnq pipe -c ipc://@work -c ipc://@sink -e 'it.upcase'
           # terminal 3: collector
           nnq pull --bind ipc://@sink
 
           # 4 Ractor workers in a single process (-P)
-          nnq pipe -c ipc://@work -c ipc://@sink -P4 -r./fib -e 'fib(Integer($_)).to_s'
+          nnq pipe -c ipc://@work -c ipc://@sink -P4 -r./fib -e 'fib(Integer(it)).to_s'
 
           # exit when producer disconnects (--transient)
-          nnq pipe -c ipc://@work -c ipc://@sink --transient -e '$_.upcase'
+          nnq pipe -c ipc://@work -c ipc://@sink --transient -e 'it.upcase'
 
           # fan-in: multiple sources -> one sink
           nnq pipe --in -c ipc://@work1 -c ipc://@work2 \
-            --out -c ipc://@sink -e '$_.upcase'
+            --out -c ipc://@sink -e 'it.upcase'
 
           # fan-out: one source -> multiple sinks (round-robin)
-          nnq pipe --in -b tcp://:5555 --out -c ipc://@sink1 -c ipc://@sink2 -e '$_'
+          nnq pipe --in -b tcp://:5555 --out -c ipc://@sink1 -c ipc://@sink2 -e 'it'
 
         -- Formats --------------------------------------------------
 
@@ -104,10 +104,6 @@ module NNQ
 
           # quoted -- lossless, round-trippable (uses String#dump escaping)
           nnq pull --bind tcp://:5557 --quoted
-
-          # JSON Lines -- single-element arrays (nnq is single-body)
-          echo '["payload"]' | nnq push --connect tcp://localhost:5557 --jsonl
-          nnq pull --bind tcp://:5557 --jsonl
 
           # raw -- emit the body verbatim (no framing, no newline)
           nnq pull --bind tcp://:5557 --raw
@@ -121,25 +117,25 @@ module NNQ
         -- Ruby Eval ------------------------------------------------
 
           # filter incoming: only pass messages containing "error"
-          nnq pull -b tcp://:5557 --recv-eval '$_.include?("error") ? $_ : nil'
+          nnq pull -b tcp://:5557 --recv-eval 'it.include?("error") ? it : nil'
 
           # transform incoming with gems
-          nnq sub -c tcp://localhost:5556 -rjson -e 'JSON.parse($_)["temperature"]'
+          nnq sub -c tcp://localhost:5556 -rjson -e 'JSON.parse(it)["temperature"]'
 
           # require a local file, use its methods
-          nnq rep --bind tcp://:5555 --require ./transform.rb -e 'upcase($_)'
+          nnq rep --bind tcp://:5555 --require ./transform.rb -e 'transform(it)'
 
-          # next skips, break stops -- regexps match against $_
-          nnq pull -b tcp://:5557 -e 'next if /^#/; break if /quit/; $_'
+          # next skips, break stops
+          nnq pull -b tcp://:5557 -e 'next if /^#/; break if it =~ /quit/; it_'
 
           # BEGIN/END blocks (like awk) -- accumulate and summarize
-          nnq pull -b tcp://:5557 -e 'BEGIN{@sum = 0} @sum += Integer($_); nil END{puts @sum}'
+          nnq pull -b tcp://:5557 -e 'BEGIN{@sum = 0} @sum += Integer(it); nil END{puts @sum}'
 
           # transform outgoing messages
-          echo hello | nnq push -c tcp://localhost:5557 --send-eval '$_.upcase'
+          echo hello | nnq push -c tcp://localhost:5557 --send-eval 'it.upcase'
 
           # REQ: transform request and reply independently
-          echo hello | nnq req -c tcp://localhost:5555 -E '$_.upcase' -e '$_'
+          echo hello | nnq req -c tcp://localhost:5555 -E 'it.upcase' -e 'it'
 
         -- Script Handlers (-r) ------------------------------------
 
@@ -150,7 +146,7 @@ module NNQ
           nnq pull --bind tcp://:5557 -r./handler.rb
 
           # combine script handlers with inline eval
-          nnq req -c tcp://localhost:5555 -r./handler.rb -E '$_.upcase'
+          nnq req -c tcp://localhost:5555 -r./handler.rb -E 'it.upcase'
 
           # NNQ.outgoing { |msg| ... }   -- registered outgoing transform
           # NNQ.incoming { |msg| ... }   -- registered incoming transform
@@ -268,7 +264,6 @@ module NNQ
           o.on("-A", "--ascii",   "Safe ASCII, non-printable as dots (default)") { opts[:format] = :ascii }
           o.on("-Q", "--quoted",  "C-style quoted with escapes")                 { opts[:format] = :quoted }
           o.on(      "--raw",     "Raw binary body, no framing, no newline")    { opts[:format] = :raw }
-          o.on("-J", "--jsonl",   "JSON Lines (single-element array per line)") { opts[:format] = :jsonl }
           o.on(      "--msgpack", "MessagePack (binary stream)")                 { require "msgpack"; opts[:format] = :msgpack }
           o.on("-M", "--marshal", "Ruby Marshal stream (binary)")                 { opts[:format] = :marshal }
 
@@ -316,8 +311,8 @@ module NNQ
           end
 
           o.separator "\nProcessing (-e = incoming, -E = outgoing):"
-          o.on("-e", "--recv-eval EXPR", "Eval Ruby for each incoming message ($_ = body)") { |v| opts[:recv_expr] = v }
-          o.on("-E", "--send-eval EXPR", "Eval Ruby for each outgoing message ($_ = body)") { |v| opts[:send_expr] = v }
+          o.on("-e", "--recv-eval EXPR", "Eval Ruby for each incoming message (it = msg)") { |v| opts[:recv_expr] = v }
+          o.on("-E", "--send-eval EXPR", "Eval Ruby for each outgoing message (it = msg)") { |v| opts[:send_expr] = v }
           o.on("-r", "--require LIB",  "Require lib/file in Async context; use '-' for stdin. Scripts can register NNQ.outgoing/incoming") { |v|
             require "nnq" unless defined?(NNQ::VERSION)
             opts[:scripts] << (v == "-" ? :stdin : (v.start_with?("./", "../") ? File.expand_path(v) : v))

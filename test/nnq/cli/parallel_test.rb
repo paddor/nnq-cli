@@ -5,15 +5,14 @@ require "securerandom"
 
 # -- Pipe parallel execution (-P) -------------------------------------
 #
-# FIB expression (iterative, no method definition). NNQ is single-frame
-# so `$_` is the message body; the evaluator wraps it as a 1-element
-# `$F` array for omq-cli compatibility.
+# FIB expression (iterative, no method definition). The evaluator
+# exposes the body via the `it` default block variable.
 #
-#   n = Integer($_); a, b = 0, 1; n.times { a, b = b, a+b }; a.to_s
+#   n = Integer(it); a, b = 0, 1; n.times { a, b = b, a+b }; a.to_s
 #
 # fib(1..10) = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55]  sum = 143
 #
-FIB_EXPR = "n=Integer($_);a,b=0,1;n.times{a,b=b,a+b};a.to_s".freeze
+FIB_EXPR = "n=Integer(it);a,b=0,1;n.times{a,b=b,a+b};a.to_s".freeze
 FIB_1_10 = [1, 1, 2, 3, 5, 8, 13, 21, 34, 55].freeze
 
 
@@ -75,7 +74,7 @@ describe "pipe -P parallel execution" do
     work_url    = ipc_url("pipe-begin-work")
     results_url = ipc_url("pipe-begin-results")
 
-    expr = "BEGIN{ @s=0 } @s += Integer($_); nil END{ @s.to_s }"
+    expr = "BEGIN{ @s=0 } @s += Integer(it); nil END{ @s.to_s }"
 
     cfg = make_config(
       type_name:     "pipe",
