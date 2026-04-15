@@ -15,11 +15,11 @@ module NNQ
         i = 0
         sleep(config.delay) if config.delay
         loop do
-          parts = read_next
-          break unless parts
-          parts = eval_send_expr(parts)
-          next unless parts
-          survey_and_collect(parts)
+          msg = read_next
+          break unless msg
+          msg = eval_send_expr(msg)
+          next unless msg
+          survey_and_collect(msg)
           i += 1
           break if n && n > 0 && i >= n
           break if !config.interval && (config.data || config.file)
@@ -28,11 +28,11 @@ module NNQ
       end
 
 
-      def survey_and_collect(parts)
-        return if parts.empty?
-        parts = [Marshal.dump(parts.first)] if config.format == :marshal
-        parts = @fmt.compress(parts)
-        @sock.send_survey(parts.first)
+      def survey_and_collect(msg)
+        return if msg.empty?
+        msg = [Marshal.dump(msg.first)] if config.format == :marshal
+        msg = @fmt.compress(msg)
+        @sock.send_survey(msg.first)
         transient_ready!
         collect_replies
       end
@@ -100,11 +100,11 @@ module NNQ
       end
 
 
-      def send_reply(parts)
-        return if parts.empty?
-        parts = [Marshal.dump(parts.first)] if config.format == :marshal
-        parts = @fmt.compress(parts)
-        @sock.send_reply(parts.first)
+      def send_reply(msg)
+        return if msg.empty?
+        msg = [Marshal.dump(msg.first)] if config.format == :marshal
+        msg = @fmt.compress(msg)
+        @sock.send_reply(msg.first)
         transient_ready!
       end
     end

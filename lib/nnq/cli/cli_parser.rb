@@ -105,7 +105,7 @@ module NNQ
           # quoted -- lossless, round-trippable (uses String#dump escaping)
           nnq pull --bind tcp://:5557 --quoted
 
-          # JSON Lines -- single-element arrays (nnq is single-frame)
+          # JSON Lines -- single-element arrays (nnq is single-body)
           echo '["payload"]' | nnq push --connect tcp://localhost:5557 --jsonl
           nnq pull --bind tcp://:5557 --jsonl
 
@@ -145,7 +145,7 @@ module NNQ
 
           # handler.rb -- register transforms from a file
           #   db = PG.connect("dbname=app")
-          #   NNQ.incoming { |parts| db.exec(parts.first).values.flatten.first }
+          #   NNQ.incoming { |msg| db.exec(msg).values.flatten.first }
           #   at_exit { db.close }
           nnq pull --bind tcp://:5557 -r./handler.rb
 
@@ -231,6 +231,7 @@ module NNQ
 
           o.separator "Connection:"
           o.on("-c", "--connect URL", "Connect to endpoint (repeatable)") { |v|
+            v = expand_endpoint(v)
             ep = Endpoint.new(v, false)
             case pipe_side
             when :in
@@ -243,6 +244,7 @@ module NNQ
             end
           }
           o.on("-b", "--bind URL", "Bind to endpoint (repeatable)") { |v|
+            v = expand_endpoint(v)
             ep = Endpoint.new(v, true)
             case pipe_side
             when :in
@@ -422,6 +424,15 @@ module NNQ
         if type_name == "pipe"
           has_in_out = opts[:in_endpoints].any? || opts[:out_endpoints].any?
           if has_in_out
+            # Promote bare endpoints into the missing side:
+            # `pipe -c SRC --out -c DST` → bare SRC becomes --in
+            if opts[:in_endpoints].empty? && opts[:endpoints].any?
+              opts[:in_endpoints] = opts[:endpoints]
+              opts[:endpoints]    = []
+            elsif opts[:out_endpoints].empty? && opts[:endpoints].any?
+              opts[:out_endpoints] = opts[:endpoints]
+              opts[:endpoints]     = []
+            end
             abort "pipe --in requires at least one endpoint"             if opts[:in_endpoints].empty?
             abort "pipe --out requires at least one endpoint"            if opts[:out_endpoints].empty?
             abort "pipe: don't mix --in/--out with bare -b/-c endpoints" unless opts[:endpoints].empty?
@@ -461,6 +472,13 @@ module NNQ
                    end
         dups = all_urls.tally.select { |_, n| n > 1 }.keys
         abort "duplicate endpoint: #{dups.first}" if dups.any?
+      end
+
+
+      # Expands shorthand `@name` to `ipc://@name` (Linux abstract namespace).
+      # Only triggers when the value starts with `@` and has no `://` scheme.
+      def expand_endpoint(url)
+        url.start_with?("@") && !url.include?("://") ? "ipc://#{url}" : url
       end
     end
   end

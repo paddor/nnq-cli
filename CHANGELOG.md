@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- **Peer wait for bind-mode bounded senders** — `nnq push -b ... -d
+  hello` now waits for the first peer before sending, so one-shot
+  `-d`/`-f`/`-E` payloads don't just get queued into HWM and dropped on
+  exit. Interactive stdin still sends without waiting.
+- **`--count N` honored on one-shot sends** — `-d`/`-f` and pure-
+  generator `-E` loop N times instead of firing once.
+- **Interactive TTY fallback** — bare `nnq push -c tcp://...` on a
+  terminal reads lines from the TTY until ^D (matching omq-cli).
+  Pure-generator `-E` is checked before the TTY fallback.
+- **`nnq:` log prefix** — `BaseRunner#log` routes through
+  `Term.log_prefix` with an `nnq: ` prefix, so every stderr line from a
+  CLI run looks consistent with attach/event lines.
+- **No more "frames"/"parts"** — NNG has no multipart concept; all
+  `parts` variables renamed to `msg`, and comments/docs updated from
+  "frame" to "message"/"body".
+- **Eval `#to_s` coercion** — non-string eval results (e.g.
+  `-E 'Time.now'`) are coerced via `#to_s` instead of raising
+  `NoMethodError` on `#to_str`. Array elements are coerced
+  individually.
+- **`@name` IPC shorthand** — `@foo` expands to `ipc://@foo`
+  (Linux abstract namespace) in `-b`/`-c` arguments.
+- **Pipe: bare endpoint promotion** — `pipe -c SRC --out -c DST`
+  automatically promotes the bare `-c SRC` to `--in`.
+- **Pipe: fan-out fairness yield** — multi-output pipes yield after
+  each send so send-pump fibers distribute messages fairly across
+  output peers.
+- **Formatter: empty-frame preview** — empty bodies render as `''`
+  instead of `[0B]` in verbose output.
+- **Formatter: nil-safe compression** — `compress`/`decompress` skip
+  nil and empty frames instead of crashing.
 - **`NNQ::CLI::Term` module** — consolidates verbose log formatting
   (timestamps at `-vvvv`, monitor events, endpoint attach lines) into a
   stateless module. Replaces four duplicated inline formatting blocks

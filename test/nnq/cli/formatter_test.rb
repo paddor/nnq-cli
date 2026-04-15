@@ -9,7 +9,7 @@ describe NNQ::CLI::Formatter do
   describe "ascii" do
     before { @fmt = NNQ::CLI::Formatter.new(:ascii) }
 
-    it "encodes single-frame message" do
+    it "encodes single-body message" do
       assert_equal "hello\n", @fmt.encode(["hello"])
     end
 
@@ -31,8 +31,8 @@ describe NNQ::CLI::Formatter do
     end
 
     it "round-trips printable text" do
-      parts = ["hello"]
-      assert_equal parts, @fmt.decode(@fmt.encode(parts))
+      msg = ["hello"]
+      assert_equal msg, @fmt.decode(@fmt.encode(msg))
     end
   end
 
@@ -86,8 +86,8 @@ describe NNQ::CLI::Formatter do
     end
 
     it "round-trips text with special characters" do
-      parts = ["line1\nline2\ttab\\back"]
-      assert_equal parts, @fmt.decode(@fmt.encode(parts))
+      msg = ["line1\nline2\ttab\\back"]
+      assert_equal msg, @fmt.decode(@fmt.encode(msg))
     end
 
     it "round-trips binary data" do
@@ -134,7 +134,7 @@ describe NNQ::CLI::Formatter do
       assert_equal "[\"\"]\n", @fmt.encode([""])
     end
 
-    it "decodes JSON array into 1-element parts" do
+    it "decodes JSON array into 1-element array" do
       assert_equal ["hello"], @fmt.decode("[\"hello\"]\n")
     end
 
@@ -142,14 +142,14 @@ describe NNQ::CLI::Formatter do
       assert_equal ["a"], @fmt.decode("[\"a\",\"b\"]\n")
     end
 
-    it "round-trips single-frame messages" do
-      parts = ["frame1"]
-      assert_equal parts, @fmt.decode(@fmt.encode(parts))
+    it "round-trips single-body messages" do
+      msg = ["body1"]
+      assert_equal msg, @fmt.decode(@fmt.encode(msg))
     end
 
     it "handles special JSON characters" do
-      parts = ["line\nnew\ttab\"quote"]
-      assert_equal parts, @fmt.decode(@fmt.encode(parts))
+      msg = ["line\nnew\ttab\"quote"]
+      assert_equal msg, @fmt.decode(@fmt.encode(msg))
     end
   end
 
@@ -188,17 +188,17 @@ describe NNQ::CLI::Formatter do
   describe "compression" do
     it "passes through when disabled" do
       fmt   = NNQ::CLI::Formatter.new(:ascii)
-      parts = ["hello"]
-      assert_same parts, fmt.compress(parts)
-      assert_same parts, fmt.decompress(parts)
+      msg = ["hello"]
+      assert_same msg, fmt.compress(msg)
+      assert_same msg, fmt.decompress(msg)
     end
 
     it "round-trips with compression enabled" do
       fmt        = NNQ::CLI::Formatter.new(:ascii, compress: true)
-      parts      = ["hello world, hello world, hello world"]
-      compressed = fmt.compress(parts)
-      refute_equal parts, compressed
-      assert_equal parts, fmt.decompress(compressed)
+      msg      = ["hello world, hello world, hello world"]
+      compressed = fmt.compress(msg)
+      refute_equal msg, compressed
+      assert_equal msg, fmt.decompress(compressed)
     end
 
     it "compresses large data" do
@@ -220,20 +220,20 @@ describe NNQ::CLI::Formatter do
   # -- Preview -----------------------------------------------------
 
   describe "preview" do
-    it "renders a single printable frame" do
+    it "renders a single printable body" do
       assert_equal "(3B) foo", NNQ::CLI::Formatter.preview(["foo"])
     end
 
-    it "renders an empty frame as [0B] marker" do
-      assert_equal "(0B) [0B]", NNQ::CLI::Formatter.preview([""])
+    it "renders an empty body as '' marker" do
+      assert_equal "(0B) ''", NNQ::CLI::Formatter.preview([""])
     end
 
-    it "truncates long printable frames" do
+    it "truncates long printable bodies" do
       preview = NNQ::CLI::Formatter.preview(["abcdefghijklmnop"])
       assert_equal "(16B) abcdefghijkl...", preview
     end
 
-    it "shows byte length for binary frames" do
+    it "shows byte length for binary bodies" do
       assert_equal "(4B) [4B]", NNQ::CLI::Formatter.preview(["\x00\x01\x02\x03"])
     end
   end

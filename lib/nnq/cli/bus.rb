@@ -19,10 +19,10 @@ module NNQ
           n = config.count
           i = 0
           loop do
-            parts = recv_msg
-            break if parts.nil?
-            parts = eval_recv_expr(parts)
-            output(parts)
+            msg = recv_msg
+            break if msg.nil?
+            msg = eval_recv_expr(msg)
+            output(msg)
             i += 1
             break if n && n > 0 && i >= n
           end

@@ -99,11 +99,11 @@ module NNQ
           loop do
             body = @pull.receive
             break if body.nil?
-            parts = NNQ::CLI::ExpressionEvaluator.normalize_result(
+            msg = NNQ::CLI::ExpressionEvaluator.normalize_result(
               @ctx.instance_exec(@fmt_in.decompress([body]), &@eval_proc)
             )
-            unless parts.nil? || parts.empty?
-              out = @fmt_out.compress(parts)
+            unless msg.nil? || msg.empty?
+              out = @fmt_out.compress(msg)
               @push.send(out.first)
             end
             n -= 1 if n && n > 0

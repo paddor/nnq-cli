@@ -8,7 +8,7 @@ module NNQ
     #
     # One instance per direction (send or recv).
     #
-    # nnq is single-frame, so `$F` is always a 1-element array and `$_`
+    # nnq has no multipart, so `$F` is always a 1-element array and `$_`
     # is the body string.
     #
     class ExpressionEvaluator
@@ -43,25 +43,19 @@ module NNQ
       end
 
 
-      # Runs the eval proc against +parts+ using +context+ as self.
+      # Runs the eval proc against +msg+ using +context+ as self.
       # Returns the normalised result Array, nil (filter/skip), or SENT.
-      def call(parts, context)
-        return parts unless @eval_proc
+      def call(msg, context)
+        return msg unless @eval_proc
 
-        $F     = parts
-        result = context.instance_exec(parts, &@eval_proc)
+        $F     = msg
+        result = context.instance_exec(msg, &@eval_proc)
         return nil  if result.nil?
         return SENT if result.equal?(context)
         return [result] if @format == :marshal
 
-        case result
-        when Array
-          result.first(1) # nnq is single-frame — keep only the first element
-        when String
-          [result]
-        else
-          [result.to_str]
-        end
+        result = result.is_a?(Array) ? result.first(1) : [result]
+        result.map!(&:to_s)
       rescue => e
         $stderr.puts "nnq: eval error: #{e.message} (#{e.class})"
         exit 3
@@ -71,16 +65,9 @@ module NNQ
       # Normalises an eval result to nil (skip) or a 1-element Array of strings.
       # Used inside Ractor worker blocks.
       def self.normalize_result(result)
-        case result
-        when nil
-          nil
-        when Array
-          result.first(1)
-        when String
-          [result]
-        else
-          [result.to_s]
-        end
+        return nil if result.nil?
+        result = result.is_a?(Array) ? result.first(1) : [result]
+        result.map!(&:to_s)
       end
 
 

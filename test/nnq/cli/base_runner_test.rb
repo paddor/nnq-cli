@@ -12,7 +12,7 @@ describe "output" do
     )
   end
 
-  it "skips nil parts" do
+  it "skips nil msg" do
     out      = StringIO.new
     $stdout  = out
     @runner.send(:output, nil)

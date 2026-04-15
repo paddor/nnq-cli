@@ -5,10 +5,10 @@ module NNQ
     # Template runner base class for all socket-type CLI runners.
     # Subclasses override {#run_loop} to implement socket-specific behaviour.
     #
-    # nnq is single-frame: the wire carries one String body per message. To
-    # keep -e/-E eval expressions that use `$F`/`$_` working the same way as
-    # in omq-cli, the runner protocol still passes `parts` as a 1-element
-    # Array internally and unwraps to a bare String at the send boundary.
+    # nnq carries one String body per message (no multipart). The runner
+    # protocol wraps it in a 1-element Array internally so that eval
+    # expressions using `$F`/`$_` work the same way as in omq-cli, and
+    # unwraps to a bare String at the send boundary.
     class BaseRunner
       # @return [Config] frozen CLI configuration
       # @return [Object] the NNQ socket instance
@@ -107,14 +107,27 @@ module NNQ
 
 
       def needs_peer_wait?
-        !config.recv_only? && config.connects.any?
+        return false if config.recv_only?
+        return true if config.connects.any?
+
+        # Bind-mode senders with a bounded or scheduled send plan:
+        # wait for the first peer so a one-shot `-d` / `-E` doesn't
+        # just queue into HWM and then exit before anyone is
+        # listening. Interactive stdin still goes through unwaited
+        # so typing isn't gated on a peer.
+        config.binds.any? && bounded_or_scheduled_send?
+      end
+
+
+      def bounded_or_scheduled_send?
+        config.interval || config.data || config.file || @send_eval_proc
       end
 
 
       def wait_for_peer
         wait_body = proc do
           @sock.peer_connected.wait
-          log "Peer connected"
+          log "peer connected"
           apply_grace_period
         end
 
@@ -153,13 +166,22 @@ module NNQ
         if config.interval
           run_interval_send(n)
         elsif config.data || config.file
-          parts = eval_send_expr(read_next)
-          send_msg(parts) if parts
+          # One-shot from -d/-f. --count N fires the same payload N times.
+          msg = eval_send_expr(read_next)
+          (n && n > 0 ? n : 1).times { send_msg(msg) } if msg
         elsif stdin_ready?
           run_stdin_send(n)
         elsif @send_eval_proc
-          parts = eval_send_expr(nil)
-          send_msg(parts) if parts
+          # Pure generator: -e/-E with no stdin input. Fire once by
+          # default, --count N fires N times.
+          (n && n > 0 ? n : 1).times do
+            msg = eval_send_expr(nil)
+            send_msg(msg) if msg
+          end
+        elsif config.stdin_is_tty
+          # Bare interactive invocation on a terminal: read lines from
+          # the tty until the user hits ^D.
+          run_stdin_send(n)
         end
       end
 
@@ -177,10 +199,10 @@ module NNQ
       def run_stdin_send(n)
         i = 0
         loop do
-          parts = read_next
-          break unless parts
-          parts = eval_send_expr(parts)
-          send_msg(parts) if parts
+          msg = read_next
+          break unless msg
+          msg = eval_send_expr(msg)
+          send_msg(msg) if msg
           i += 1
           break if n && n > 0 && i >= n
         end
@@ -192,15 +214,15 @@ module NNQ
         if raw.nil?
           if @send_eval_proc && !@stdin_ready
             # Pure generator mode: no stdin, eval produces output from nothing.
-            parts = eval_send_expr(nil)
-            send_msg(parts) if parts
+            msg = eval_send_expr(nil)
+            send_msg(msg) if msg
             return 1
           end
           @send_tick_eof = true
           return 0
         end
-        parts = eval_send_expr(raw)
-        send_msg(parts) if parts
+        msg = eval_send_expr(raw)
+        send_msg(msg) if msg
         1
       end
 
@@ -212,10 +234,10 @@ module NNQ
           run_interval_recv(n)
         else
           loop do
-            parts = recv_msg
-            break if parts.nil?
-            parts = eval_recv_expr(parts)
-            output(parts)
+            msg = recv_msg
+            break if msg.nil?
+            msg = eval_recv_expr(msg)
+            output(msg)
             i += 1
             break if n && n > 0 && i >= n
           end
@@ -235,13 +257,13 @@ module NNQ
 
 
       def recv_tick
-        parts = recv_msg
-        if parts.nil?
+        msg = recv_msg
+        if msg.nil?
           @recv_tick_eof = true
           return 0
         end
-        parts = eval_recv_expr(parts)
-        output(parts)
+        msg = eval_recv_expr(msg)
+        output(msg)
         1
       end
 
@@ -263,12 +285,12 @@ module NNQ
       # -- Message I/O -------------------------------------------------
 
 
-      # parts: 1-element Array. nnq sockets take a bare String body.
-      def send_msg(parts)
-        return if parts.empty?
-        parts = [Marshal.dump(parts.first)] if config.format == :marshal
-        parts = @fmt.compress(parts)
-        @sock.send(parts.first)
+      # msg: 1-element Array. nnq sockets take a bare String body.
+      def send_msg(msg)
+        return if msg.empty?
+        msg = [Marshal.dump(msg.first)] if config.format == :marshal
+        msg = @fmt.compress(msg)
+        @sock.send(msg.first)
         transient_ready!
       end
 
@@ -277,10 +299,10 @@ module NNQ
       def recv_msg
         raw = @sock.receive
         return nil if raw.nil?
-        parts = @fmt.decompress([raw])
-        parts = [Marshal.load(parts.first)] if config.format == :marshal
+        msg = @fmt.decompress([raw])
+        msg = [Marshal.load(msg.first)] if config.format == :marshal
         transient_ready!
-        parts
+        msg
       end
 
 
@@ -336,9 +358,9 @@ module NNQ
       end
 
 
-      def output(parts)
-        return if config.quiet || parts.nil?
-        $stdout.write(@fmt.encode(parts))
+      def output(msg)
+        return if config.quiet || msg.nil?
+        $stdout.write(@fmt.encode(msg))
         $stdout.flush
       end
 
@@ -374,13 +396,13 @@ module NNQ
       end
 
 
-      def eval_send_expr(parts)
-        @send_evaluator.call(parts, @sock)
+      def eval_send_expr(msg)
+        @send_evaluator.call(msg, @sock)
       end
 
 
-      def eval_recv_expr(parts)
-        @recv_evaluator.call(parts, @sock)
+      def eval_recv_expr(msg)
+        @recv_evaluator.call(msg, @sock)
       end
 
 
@@ -406,7 +428,8 @@ module NNQ
 
 
       def log(msg)
-        $stderr.write("#{msg}\n") if config.verbose >= 1
+        return unless config.verbose >= 1
+        $stderr.write("#{Term.log_prefix(config.verbose)}nnq: #{msg}\n")
       end
 
 

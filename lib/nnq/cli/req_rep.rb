@@ -15,11 +15,11 @@ module NNQ
         i = 0
         sleep(config.delay) if config.delay
         loop do
-          parts = read_next
-          break unless parts
-          parts = eval_send_expr(parts)
-          next unless parts
-          reply = request_and_receive(parts)
+          msg = read_next
+          break unless msg
+          msg = eval_send_expr(msg)
+          next unless msg
+          reply = request_and_receive(msg)
           break if reply.nil?
           output(eval_recv_expr(reply))
           i += 1
@@ -30,11 +30,11 @@ module NNQ
       end
 
 
-      def request_and_receive(parts)
-        return nil if parts.empty?
-        parts = [Marshal.dump(parts.first)] if config.format == :marshal
-        parts = @fmt.compress(parts)
-        reply_body = @sock.send_request(parts.first)
+      def request_and_receive(msg)
+        return nil if msg.empty?
+        msg = [Marshal.dump(msg.first)] if config.format == :marshal
+        msg = @fmt.compress(msg)
+        reply_body = @sock.send_request(msg.first)
         transient_ready!
         return nil if reply_body.nil?
         reply = @fmt.decompress([reply_body])
@@ -93,11 +93,11 @@ module NNQ
       end
 
 
-      def send_reply(parts)
-        return if parts.empty?
-        parts = [Marshal.dump(parts.first)] if config.format == :marshal
-        parts = @fmt.compress(parts)
-        @sock.send_reply(parts.first)
+      def send_reply(msg)
+        return if msg.empty?
+        msg = [Marshal.dump(msg.first)] if config.format == :marshal
+        msg = @fmt.compress(msg)
+        @sock.send_reply(msg.first)
         transient_ready!
       end
     end

@@ -55,7 +55,7 @@ module NNQ
         wait_for_peers_with_timeout if config.timeout
         setup_sequential_transient(task)
         @sock.instance_exec(&@recv_begin_proc) if @recv_begin_proc
-        sequential_message_loop
+        sequential_message_loop(fan_out: out_eps.size > 1)
         @sock.instance_exec(&@recv_end_proc) if @recv_end_proc
       ensure
         @pull&.close
@@ -96,18 +96,28 @@ module NNQ
       end
 
 
-      def sequential_message_loop
+      def sequential_message_loop(fan_out: false)
         n = config.count
         i = 0
+
         loop do
           body = @pull.receive
           break if body.nil?
-          parts = @fmt_in.decompress([body])
-          parts = eval_recv_expr(parts)
-          if parts && !parts.empty?
-            out = @fmt_out.compress(parts)
+          msg = @fmt_in.decompress([body])
+          msg = eval_recv_expr(msg)
+
+          if msg && !msg.empty?
+            out = @fmt_out.compress(msg)
             @push.send(out.first)
           end
+
+          # Yield after send so send-pump fibers can drain the queue
+          # before the next message is enqueued. Without this, one pump
+          # monopolizes the shared queue when messages arrive in bursts.
+          # Only needed for multi-output pipes; single-output has no
+          # fairness concern.
+          Async::Task.current.yield if fan_out
+
           i += 1
           break if n && n > 0 && i >= n
         end
@@ -173,8 +183,8 @@ module NNQ
       end
 
 
-      def eval_recv_expr(parts)
-        result = @recv_evaluator.call(parts, @sock)
+      def eval_recv_expr(msg)
+        result = @recv_evaluator.call(msg, @sock)
         result.equal?(ExpressionEvaluator::SENT) ? nil : result
       end
 

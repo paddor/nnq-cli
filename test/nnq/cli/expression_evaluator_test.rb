@@ -11,7 +11,7 @@ describe "eval_send_expr" do
     @runner.send(:compile_expr)
   end
 
-  it "sets $F to a 1-element parts array" do
+  it "sets $F to a 1-element message array" do
     result = @runner.send(:eval_send_expr, ["hello"])
     assert_equal ["hello"], result
   end
@@ -26,7 +26,7 @@ describe "eval_send_expr" do
     assert_equal ["first"], result
   end
 
-  it "sets $_ to nil when parts is nil" do
+  it "sets $_ to nil when msg is nil" do
     runner = NNQ::CLI::PushRunner.new(
       make_config(type_name: "push", send_expr: "$_.nil? ? 'yes' : 'no'"),
       NNQ::PUSH
@@ -87,7 +87,7 @@ describe "eval_recv_expr" do
     assert_equal ["HELLO"], result
   end
 
-  it "returns parts unchanged when no recv_expr" do
+  it "returns msg unchanged when no recv_expr" do
     runner = NNQ::CLI::PullRunner.new(
       make_config(type_name: "pull"),
       NNQ::PULL

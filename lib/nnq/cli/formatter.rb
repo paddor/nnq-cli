@@ -5,12 +5,13 @@ module NNQ
     # Raised when LZ4 decompression fails.
     class DecompressError < RuntimeError; end
 
-    # Handles encoding/decoding a single-frame message in the configured
+    # Handles encoding/decoding a single-body message in the configured
     # format, plus optional LZ4 compression.
     #
-    # Unlike omq-cli's Formatter, nnq messages are single-frame (one
-    # `String` body). The API still accepts/returns a 1-element array so
-    # that `$F`-based eval expressions work the same way.
+    # Unlike omq-cli's Formatter, nnq messages are not multipart — one
+    # `String` body per message. The API still accepts/returns a
+    # 1-element array so that `$F`-based eval expressions work the same
+    # way.
     class Formatter
       # @param format [Symbol] wire format (:ascii, :quoted, :raw, :jsonl, :msgpack, :marshal)
       # @param compress [Boolean] whether to apply LZ4 compression
@@ -22,10 +23,10 @@ module NNQ
 
       # Encodes a message body into a printable string for output.
       #
-      # @param parts [Array<String>] single-element array (the body)
+      # @param msg [Array<String>] single-element array (the body)
       # @return [String] formatted output line
-      def encode(parts)
-        body = parts.first.to_s
+      def encode(msg)
+        body = msg.first.to_s
         case @format
         when :ascii
           body.b.gsub(/[^[:print:]\t]/, ".") + "\n"
@@ -43,7 +44,7 @@ module NNQ
       end
 
 
-      # Decodes a formatted input line into a 1-element parts array.
+      # Decodes a formatted input line into a 1-element message array.
       #
       # @param line [String] input line (newline-terminated)
       # @return [Array<String>] 1-element array
@@ -90,19 +91,20 @@ module NNQ
 
       # Compresses the body with LZ4 if compression is enabled.
       #
-      # @param parts [Array<String>] single-element array
+      # @param msg [Array<String>] single-element array
       # @return [Array<String>] optionally compressed
-      def compress(parts)
-        @compress ? parts.map { |p| RLZ4.compress(p) } : parts
+      def compress(msg)
+        @compress ? msg.map { |p| RLZ4.compress(p) if p } : msg
       end
 
 
       # Decompresses the body with LZ4 if compression is enabled.
+      # nil/empty bodies pass through.
       #
-      # @param parts [Array<String>] possibly compressed single-element array
+      # @param msg [Array<String>] possibly compressed single-element array
       # @return [Array<String>] decompressed
-      def decompress(parts)
-        @compress ? parts.map { |p| RLZ4.decompress(p) } : parts
+      def decompress(msg)
+        @compress ? msg.map { |p| p && !p.empty? ? RLZ4.decompress(p) : p } : msg
       rescue RLZ4::DecompressError
         raise DecompressError, "decompression failed (did the sender use --compress?)"
       end
@@ -110,17 +112,17 @@ module NNQ
 
       # Formats a message body for human-readable preview (logging).
       #
-      # @param parts [Array<String>] single-element array
+      # @param msg [Array<String>] single-element array
       # @return [String] truncated preview
-      def self.preview(parts)
-        body = parts.first.to_s
-        "(#{body.bytesize}B) #{preview_frame(body)}"
+      def self.preview(msg)
+        body = msg.first.to_s
+        "(#{body.bytesize}B) #{preview_body(body)}"
       end
 
 
-      def self.preview_frame(part)
-        bytes = part.b
-        return "[0B]" if bytes.empty?
+      def self.preview_body(body)
+        bytes = body.b
+        return "''" if bytes.empty?
 
         sample    = bytes[0, 12]
         printable = sample.count("\x20-\x7e")
