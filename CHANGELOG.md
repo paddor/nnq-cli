@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.0 — 2026-04-15
+
+- **Compression switched from LZ4 to Zstd** via the new
+  [nnq-zstd](https://github.com/paddor/nnq-zstd) gem. `-z`
+  (fast, level −3) and `-Z` (balanced, level 3) are mutually
+  exclusive and map to transparent `NNQ::Zstd.wrap` decorators
+  around each socket. Sender-side dictionary training and in-band
+  dict shipping mean compression ratios on streams of similar
+  small messages are now dramatically better than the old
+  stateless LZ4 path. Both peers still have to pass `-z`/`-Z`;
+  there is no negotiation.
+- **`-Z` / `--compress-high`** flag for balanced Zstd.
+- **Formatter no longer knows about compression.** All per-message
+  compression state and logic moved out of `Formatter`; compression
+  is applied transparently at the socket boundary via the new
+  wrapper. Fewer code paths in runners.
+- **`rlz4` dependency dropped** in favor of `nnq-zstd ~> 0.1`.
+- **Lazy loading.** `nnq/zstd` (and therefore `rzstd` and the Rust
+  extension) is only required when `-z`/`-Z` is actually used,
+  keeping startup cost unchanged for non-compressing runs.
+
 ## 0.2.0 — 2026-04-15
 
 - **Peer wait for bind-mode bounded senders** — `nnq push -b ... -d

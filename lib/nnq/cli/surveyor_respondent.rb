@@ -30,9 +30,8 @@ module NNQ
 
       def survey_and_collect(msg)
         return if msg.empty?
-        msg = [Marshal.dump(msg.first)] if config.format == :marshal
-        msg = @fmt.compress(msg)
-        @sock.send_survey(msg.first)
+        body = config.format == :marshal ? Marshal.dump(msg.first) : msg.first
+        @sock.send_survey(body)
         transient_ready!
         collect_replies
       end
@@ -42,9 +41,8 @@ module NNQ
         loop do
           body = @sock.receive
           break if body.nil?
-          reply = @fmt.decompress([body])
-          reply = [Marshal.load(reply.first)] if config.format == :marshal
-          output(eval_recv_expr(reply))
+          reply = config.format == :marshal ? Marshal.load(body) : body
+          output(eval_recv_expr([reply]))
         rescue NNQ::TimedOut
           break
         end
@@ -102,9 +100,8 @@ module NNQ
 
       def send_reply(msg)
         return if msg.empty?
-        msg = [Marshal.dump(msg.first)] if config.format == :marshal
-        msg = @fmt.compress(msg)
-        @sock.send_reply(msg.first)
+        body = config.format == :marshal ? Marshal.dump(msg.first) : msg.first
+        @sock.send_reply(body)
         transient_ready!
       end
     end

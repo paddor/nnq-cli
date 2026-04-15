@@ -2,11 +2,9 @@
 
 module NNQ
   module CLI
-    # Raised when LZ4 decompression fails.
-    class DecompressError < RuntimeError; end
-
     # Handles encoding/decoding a single-body message in the configured
-    # format, plus optional LZ4 compression.
+    # format. Compression is handled by the NNQ::Zstd decorator around
+    # the socket, not by the formatter.
     #
     # Unlike omq-cli's Formatter, nnq messages are not multipart — one
     # `String` body per message. The API still accepts/returns a
@@ -14,10 +12,8 @@ module NNQ
     # way.
     class Formatter
       # @param format [Symbol] wire format (:ascii, :quoted, :raw, :jsonl, :msgpack, :marshal)
-      # @param compress [Boolean] whether to apply LZ4 compression
-      def initialize(format, compress: false)
-        @format   = format
-        @compress = compress
+      def initialize(format)
+        @format = format
       end
 
 
@@ -86,27 +82,6 @@ module NNQ
         @msgpack_unpacker.read
       rescue EOFError
         nil
-      end
-
-
-      # Compresses the body with LZ4 if compression is enabled.
-      #
-      # @param msg [Array<String>] single-element array
-      # @return [Array<String>] optionally compressed
-      def compress(msg)
-        @compress ? msg.map { |p| RLZ4.compress(p) if p } : msg
-      end
-
-
-      # Decompresses the body with LZ4 if compression is enabled.
-      # nil/empty bodies pass through.
-      #
-      # @param msg [Array<String>] possibly compressed single-element array
-      # @return [Array<String>] decompressed
-      def decompress(msg)
-        @compress ? msg.map { |p| p && !p.empty? ? RLZ4.decompress(p) : p } : msg
-      rescue RLZ4::DecompressError
-        raise DecompressError, "decompression failed (did the sender use --compress?)"
       end
 
 

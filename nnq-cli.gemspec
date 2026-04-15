@@ -13,7 +13,7 @@ Gem::Specification.new do |s|
                   "PUSH/PULL, PAIR). Supports Ruby eval (-e/-E), script " \
                   "handlers (-r), the virtual `pipe` socket with optional " \
                   "Ractor parallelism, multiple formats (ASCII, JSON Lines, " \
-                  "msgpack, Marshal), and LZ4 compression. Like nngcat from " \
+                  "msgpack, Marshal), and Zstd compression. Like nngcat from " \
                   "libnng, but with Ruby superpowers."
   s.homepage    = "https://github.com/paddor/nnq-cli"
   s.license     = "ISC"
@@ -24,7 +24,7 @@ Gem::Specification.new do |s|
   s.bindir      = "exe"
   s.executables = ["nnq"]
 
-  s.add_dependency "nnq",     "~> 0.5"
+  s.add_dependency "nnq",      "~> 0.5"
+  s.add_dependency "nnq-zstd", "~> 0.1"
   s.add_dependency "msgpack"
-  s.add_dependency "rlz4",    "~> 0.1"
 end

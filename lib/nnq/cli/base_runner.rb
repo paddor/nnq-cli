@@ -20,7 +20,7 @@ module NNQ
       def initialize(config, socket_class)
         @config = config
         @klass  = socket_class
-        @fmt    = Formatter.new(config.format, compress: config.compress)
+        @fmt    = Formatter.new(config.format)
       end
 
 
@@ -64,7 +64,8 @@ module NNQ
 
 
       def create_socket
-        SocketSetup.build(@klass, config)
+        sock = SocketSetup.build(@klass, config)
+        SocketSetup.maybe_wrap_zstd(sock, config.compress)
       end
 
 
@@ -288,9 +289,8 @@ module NNQ
       # msg: 1-element Array. nnq sockets take a bare String body.
       def send_msg(msg)
         return if msg.empty?
-        msg = [Marshal.dump(msg.first)] if config.format == :marshal
-        msg = @fmt.compress(msg)
-        @sock.send(msg.first)
+        body = config.format == :marshal ? Marshal.dump(msg.first) : msg.first
+        @sock.send(body)
         transient_ready!
       end
 
@@ -299,10 +299,9 @@ module NNQ
       def recv_msg
         raw = @sock.receive
         return nil if raw.nil?
-        msg = @fmt.decompress([raw])
-        msg = [Marshal.load(msg.first)] if config.format == :marshal
+        body = config.format == :marshal ? Marshal.load(raw) : raw
         transient_ready!
-        msg
+        [body]
       end
 
 
@@ -415,7 +414,7 @@ module NNQ
       def set_process_title(endpoints: nil)
         eps = endpoints || config.endpoints
         title = ["nnq", config.type_name]
-        title << "-z" if config.compress
+        title << (config.compress == :balanced ? "-Z" : "-z") if config.compress
         title << "-P#{config.parallel}" if config.parallel
         eps.each do |ep|
           title << (ep.respond_to?(:url) ? ep.url : ep.to_s)

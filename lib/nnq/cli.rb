@@ -1,6 +1,17 @@
 # frozen_string_literal: true
 
 require "optparse"
+
+# Forward-declare NNQ::Zstd::ProtocolError so the rescue clause below
+# resolves even when compression wasn't requested and `nnq/zstd` was
+# never required. The real class is defined in nnq-zstd; re-opening it
+# here with the same StandardError superclass is benign.
+module NNQ
+  module Zstd
+    class ProtocolError < StandardError; end
+  end
+end
+
 require_relative "cli/version"
 require_relative "cli/config"
 require_relative "cli/cli_parser"
@@ -153,8 +164,8 @@ module NNQ
                    runner_class.new(config)
                  end
         runner.call(task)
-      rescue DecompressError => e
-        $stderr.puts "nnq: #{e.message}"
+      rescue NNQ::Zstd::ProtocolError => e
+        $stderr.puts "nnq: zstd protocol error: #{e.message}"
         exit 1
       rescue IO::TimeoutError, Async::TimeoutError
         $stderr.puts "nnq: timeout" unless config.quiet

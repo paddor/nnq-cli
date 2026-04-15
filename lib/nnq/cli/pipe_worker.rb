@@ -24,8 +24,8 @@ module NNQ
           compile_expr
           run_message_loop
           run_end_block
-        rescue NNQ::CLI::DecompressError => e
-          @error_port&.send(e.message)
+        rescue NNQ::Zstd::ProtocolError => e
+          @error_port&.send("zstd protocol error: #{e.message}")
         ensure
           @pull&.close
           @push&.close
@@ -41,6 +41,8 @@ module NNQ
         @push = NNQ::CLI::SocketSetup.build(NNQ::PUSH0, @config)
         NNQ::CLI::SocketSetup.attach_endpoints(@pull, @in_eps, verbose: 0)
         NNQ::CLI::SocketSetup.attach_endpoints(@push, @out_eps, verbose: 0)
+        @pull = NNQ::CLI::SocketSetup.maybe_wrap_zstd(@pull, @config.compress_in || @config.compress)
+        @push = NNQ::CLI::SocketSetup.maybe_wrap_zstd(@push, @config.compress_out || @config.compress)
       end
 
 
@@ -86,8 +88,6 @@ module NNQ
       def compile_expr
         @begin_proc, @end_proc, @eval_proc =
           NNQ::CLI::ExpressionEvaluator.compile_inside_ractor(@config.recv_expr)
-        @fmt_in  = NNQ::CLI::Formatter.new(@config.format, compress: @config.compress_in || @config.compress)
-        @fmt_out = NNQ::CLI::Formatter.new(@config.format, compress: @config.compress_out || @config.compress)
         @ctx = Object.new
         @ctx.instance_exec(&@begin_proc) if @begin_proc
       end
@@ -100,11 +100,10 @@ module NNQ
             body = @pull.receive
             break if body.nil?
             msg = NNQ::CLI::ExpressionEvaluator.normalize_result(
-              @ctx.instance_exec(@fmt_in.decompress([body]), &@eval_proc)
+              @ctx.instance_exec([body], &@eval_proc)
             )
             unless msg.nil? || msg.empty?
-              out = @fmt_out.compress(msg)
-              @push.send(out.first)
+              @push.send(msg.first)
             end
             n -= 1 if n && n > 0
             break if n == 0
@@ -113,8 +112,7 @@ module NNQ
           loop do
             body = @pull.receive
             break if body.nil?
-            out = @fmt_out.compress(@fmt_in.decompress([body]))
-            @push.send(out.first)
+            @push.send(body)
             n -= 1 if n && n > 0
             break if n == 0
           end
@@ -130,7 +128,7 @@ module NNQ
           @ctx.instance_exec(&@end_proc)
         )
         if out && !out.empty?
-          @push.send(@fmt_out.compress(out).first)
+          @push.send(out.first)
         end
       end
     end

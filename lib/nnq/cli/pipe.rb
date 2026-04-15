@@ -12,8 +12,8 @@ module NNQ
       # @param config [Config] frozen CLI configuration
       def initialize(config)
         @config  = config
-        @fmt_in  = Formatter.new(config.format, compress: config.compress_in || config.compress)
-        @fmt_out = Formatter.new(config.format, compress: config.compress_out || config.compress)
+        @fmt_in  = Formatter.new(config.format)
+        @fmt_out = Formatter.new(config.format)
       end
 
 
@@ -68,6 +68,8 @@ module NNQ
         push = SocketSetup.build(NNQ::PUSH0, config)
         SocketSetup.attach_endpoints(pull, in_eps, verbose: config.verbose)
         SocketSetup.attach_endpoints(push, out_eps, verbose: config.verbose)
+        pull = SocketSetup.maybe_wrap_zstd(pull, config.compress_in || config.compress)
+        push = SocketSetup.maybe_wrap_zstd(push, config.compress_out || config.compress)
         [pull, push]
       end
 
@@ -103,12 +105,10 @@ module NNQ
         loop do
           body = @pull.receive
           break if body.nil?
-          msg = @fmt_in.decompress([body])
-          msg = eval_recv_expr(msg)
+          msg = eval_recv_expr([body])
 
           if msg && !msg.empty?
-            out = @fmt_out.compress(msg)
-            @push.send(out.first)
+            @push.send(msg.first)
           end
 
           # Yield after send so send-pump fibers can drain the queue
@@ -163,7 +163,9 @@ module NNQ
       def set_pipe_process_title
         in_eps, out_eps = resolve_endpoints
         title = ["nnq pipe"]
-        title << "-z" if config.compress || config.compress_in || config.compress_out
+        if (m = config.compress || config.compress_in || config.compress_out)
+          title << (m == :balanced ? "-Z" : "-z")
+        end
         title << "-P#{config.parallel}" if config.parallel
         title.concat(in_eps.map(&:url))
         title << "->"

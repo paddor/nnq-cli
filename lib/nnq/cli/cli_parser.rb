@@ -178,9 +178,9 @@ module NNQ
         send_hwm:      nil,
         sndbuf:        nil,
         rcvbuf:        nil,
-        compress:      false,
-        compress_in:   false,
-        compress_out:  false,
+        compress:      nil,
+        compress_in:   nil,
+        compress_out:  nil,
         send_expr:     nil,
         recv_expr:     nil,
         parallel:      nil,
@@ -295,16 +295,24 @@ module NNQ
           o.on("--rcvbuf N", "SO_RCVBUF kernel buffer size (e.g. 4K, 1M)") { |v| opts[:rcvbuf] = parse_byte_size(v) }
 
           o.separator "\nCompression:"
-          o.on("-z", "--compress", "LZ4 compression per message (modal with --in/--out)") do
-            require "rlz4"
-            case pipe_side
-            when :in
-              opts[:compress_in] = true
-            when :out
-              opts[:compress_out] = true
-            else
-              opts[:compress] = true
+          load_zstd = -> { require "nnq/zstd" }
+          set_compress = lambda do |sym|
+            load_zstd.call
+            target = case pipe_side
+                     when :in  then :compress_in
+                     when :out then :compress_out
+                     else           :compress
+                     end
+            if opts[target] && opts[target] != sym
+              abort "nnq: -z and -Z are mutually exclusive"
             end
+            opts[target] = sym
+          end
+          o.on("-z", "--compress", "Zstd compression (fast, level -3; modal with --in/--out)") do
+            set_compress.call(:fast)
+          end
+          o.on("-Z", "--compress-high", "Zstd compression (balanced, level 3; modal with --in/--out)") do
+            set_compress.call(:balanced)
           end
 
           o.separator "\nProcessing (-e = incoming, -E = outgoing):"

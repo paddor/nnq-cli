@@ -77,6 +77,16 @@ module NNQ
       end
 
 
+      # Wrap +sock+ with NNQ::Zstd if +mode+ is :fast or :balanced.
+      # Returns the wrapper (decorator) or +sock+ unchanged.
+      def self.maybe_wrap_zstd(sock, mode)
+        return sock unless mode
+        require "nnq/zstd"
+        level = mode == :balanced ? 3 : -3
+        NNQ::Zstd.wrap(sock, level: level)
+      end
+
+
       # Subscribe to prefixes on a SUB socket.
       #
       # Unlike ZeroMQ, nng's sub0 starts with an empty subscription set,

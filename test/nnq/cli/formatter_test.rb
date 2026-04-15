@@ -183,40 +183,6 @@ describe NNQ::CLI::Formatter do
     end
   end
 
-  # -- Compression -------------------------------------------------
-
-  describe "compression" do
-    it "passes through when disabled" do
-      fmt   = NNQ::CLI::Formatter.new(:ascii)
-      msg = ["hello"]
-      assert_same msg, fmt.compress(msg)
-      assert_same msg, fmt.decompress(msg)
-    end
-
-    it "round-trips with compression enabled" do
-      fmt        = NNQ::CLI::Formatter.new(:ascii, compress: true)
-      msg      = ["hello world, hello world, hello world"]
-      compressed = fmt.compress(msg)
-      refute_equal msg, compressed
-      assert_equal msg, fmt.decompress(compressed)
-    end
-
-    it "compresses large data" do
-      fmt   = NNQ::CLI::Formatter.new(:ascii, compress: true)
-      big   = ["x" * 10_000]
-      small = fmt.compress(big)
-      assert_operator small.first.bytesize, :<, big.first.bytesize
-      assert_equal big, fmt.decompress(small)
-    end
-
-    it "raises DecompressError on corrupted input" do
-      fmt = NNQ::CLI::Formatter.new(:ascii, compress: true)
-      assert_raises(NNQ::CLI::DecompressError) do
-        fmt.decompress(["not lz4 data"])
-      end
-    end
-  end
-
   # -- Preview -----------------------------------------------------
 
   describe "preview" do

@@ -32,14 +32,12 @@ module NNQ
 
       def request_and_receive(msg)
         return nil if msg.empty?
-        msg = [Marshal.dump(msg.first)] if config.format == :marshal
-        msg = @fmt.compress(msg)
-        reply_body = @sock.send_request(msg.first)
+        body = config.format == :marshal ? Marshal.dump(msg.first) : msg.first
+        reply_body = @sock.send_request(body)
         transient_ready!
         return nil if reply_body.nil?
-        reply = @fmt.decompress([reply_body])
-        reply = [Marshal.load(reply.first)] if config.format == :marshal
-        reply
+        reply = config.format == :marshal ? Marshal.load(reply_body) : reply_body
+        [reply]
       end
 
 
@@ -95,9 +93,8 @@ module NNQ
 
       def send_reply(msg)
         return if msg.empty?
-        msg = [Marshal.dump(msg.first)] if config.format == :marshal
-        msg = @fmt.compress(msg)
-        @sock.send_reply(msg.first)
+        body = config.format == :marshal ? Marshal.dump(msg.first) : msg.first
+        @sock.send_reply(body)
         transient_ready!
       end
     end
