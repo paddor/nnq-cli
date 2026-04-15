@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-04-15
 
 - **Peer wait for bind-mode bounded senders** — `nnq push -b ... -d
   hello` now waits for the first peer before sending, so one-shot
