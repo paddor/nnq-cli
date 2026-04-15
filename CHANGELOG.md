@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **REQ generator mode (`-E`/`-e` with no stdin).** `nnq req` now
+  produces each request from the send-eval alone when no `-d`/`-F`
+  is given and stdin is not piped, matching the existing PUSH/PUB
+  generator behaviour. Bounded by `-n` or paced by `-i` like the
+  other generator-capable runners.
+- **System tests split into themed files under `test/system/`.**
+  Replaces the monolithic `test/system_test.sh` with 10 standalone
+  files sharing `test/system/support.sh` helpers.
+  `test/system/run_all.sh` chains them; each file also runs
+  standalone. New `rake test:system` task invokes `run_all.sh`.
+- **System tests for REQ/PUSH/PUB `-E` generator mode.** REQ fires
+  `-E'"foo"' -n 3` against a REP running `-e 'it.upcase' -n 3` and
+  verifies three `FOO` replies round-trip; PUSH and PUB get the
+  same treatment.
+
 ## 0.3.1 — 2026-04-15
 
 - **Messages are single `String`s, not 1-element arrays.** Every
