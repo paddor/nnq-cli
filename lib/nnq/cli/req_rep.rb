@@ -13,18 +13,27 @@ module NNQ
       def run_loop(task)
         n = config.count
         i = 0
-        sleep(config.delay) if config.delay
+
+        sleep config.delay if config.delay
+        generator = @send_eval_proc && !config.data && !config.file && !stdin_ready?
+
         loop do
-          msg = read_next
-          break unless msg
-          msg = eval_send_expr(msg)
+          if generator
+            msg = eval_send_expr(nil)
+          else
+            msg = read_next
+            break unless msg
+            msg = eval_send_expr(msg)
+          end
+
           next unless msg
+
           reply = request_and_receive(msg)
           break if reply.nil?
           output(eval_recv_expr(reply))
           i += 1
           break if n && n > 0 && i >= n
-          break if !config.interval && (config.data || config.file)
+          break if !config.interval && (generator || config.data || config.file) && !(n && n > 0)
           wait_for_interval if config.interval
         end
       end
