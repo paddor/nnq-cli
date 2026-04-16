@@ -317,8 +317,10 @@ module NNQ
             require "nnq" unless defined?(NNQ::VERSION)
             opts[:scripts] << (v == "-" ? :stdin : (v.start_with?("./", "../") ? File.expand_path(v) : v))
           }
-          o.on("-P", "--parallel N", Integer, "Parallel Ractor workers (max 16)") { |v|
-            opts[:parallel] = [v, 16].min
+          o.on("-P", "--parallel N", Integer, "Parallel Ractor workers, 1..16 (0 = nproc, capped at 16)") { |v|
+            require "etc"
+            resolved = v.zero? ? Etc.nprocessors : v
+            opts[:parallel] = [resolved, 16].min
           }
 
           o.separator "\nOther:"

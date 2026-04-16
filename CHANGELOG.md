@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 — 2026-04-16
+
+- **`-P0` auto-sizes to `nproc`** (capped at 16). `nnq pipe -P 0`
+  now spawns one Ractor worker per online processor instead of
+  erroring. Explicit values still clamp to `1..16`.
+
 ## 0.3.2 — 2026-04-16
 
 - **REQ generator mode (`-E`/`-e` with no stdin).** `nnq req` now
