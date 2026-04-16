@@ -10,10 +10,10 @@ module NNQ
       EXAMPLES = <<~'TEXT'
         -- Request / Reply ------------------------------------------
 
-          +-----+  "hello"    +-----+
+          +-----+   "hello"    +-----+
           | REQ |------------->| REP |
           |     |<-------------|     |
-          +-----+  "HELLO"    +-----+
+          +-----+   "HELLO"    +-----+
 
           # terminal 1: echo server
           nnq rep --bind tcp://:5555 --recv-eval 'it.upcase'
@@ -27,9 +27,9 @@ module NNQ
 
         -- Publish / Subscribe --------------------------------------
 
-          +-----+  "weather.nyc 72F"  +-----+
+          +-----+   "weather.nyc 72F"  +-----+
           | PUB |--------------------->| SUB | --subscribe "weather."
-          +-----+                     +-----+
+          +-----+                      +-----+
 
           # terminal 1: subscriber (all topics by default)
           nnq sub --bind tcp://:5556
@@ -39,9 +39,9 @@ module NNQ
 
         -- Periodic Publish -------------------------------------------
 
-          +-----+  "tick 1"    +-----+
+          +-----+   "tick 1"    +-----+
           | PUB |--(every 1s)-->| SUB |
-          +-----+              +-----+
+          +-----+               +-----+
 
           # terminal 1: subscriber
           nnq sub --bind tcp://:5556
@@ -56,9 +56,9 @@ module NNQ
 
         -- Pipeline -------------------------------------------------
 
-          +------+           +------+
+          +------+            +------+
           | PUSH |----------->| PULL |
-          +------+           +------+
+          +------+            +------+
 
           # terminal 1: worker
           nnq pull --bind tcp://:5557
@@ -72,9 +72,9 @@ module NNQ
 
         -- Pipe (PULL -> eval -> PUSH) --------------------------------
 
-          +------+         +------+         +------+
+          +------+          +------+          +------+
           | PUSH |--------->| pipe |--------->| PULL |
-          +------+         +------+         +------+
+          +------+          +------+          +------+
 
           # terminal 1: producer
           echo -e "hello\nworld" | nnq push --bind ipc://@work
@@ -126,13 +126,13 @@ module NNQ
           nnq rep --bind tcp://:5555 --require ./transform.rb -e 'transform(it)'
 
           # next skips, break stops
-          nnq pull -b tcp://:5557 -e 'next if /^#/; break if it =~ /quit/; it_'
+          nnq pull -b tcp://:5557 -e 'next if /^#/; break if it =~ /quit/; it'
 
           # BEGIN/END blocks (like awk) -- accumulate and summarize
           nnq pull -b tcp://:5557 -e 'BEGIN{@sum = 0} @sum += Integer(it); nil END{puts @sum}'
 
-          # transform outgoing messages
-          echo hello | nnq push -c tcp://localhost:5557 --send-eval 'it.upcase'
+          # transform outgoing messages (with explicit block variable msg)
+          echo hello | nnq push -c tcp://localhost:5557 --send-eval '|msg| msg.upcase'
 
           # REQ: transform request and reply independently
           echo hello | nnq req -c tcp://localhost:5555 -E 'it.upcase' -e 'it'

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.2 — 2026-04-16
 
 - **REQ generator mode (`-E`/`-e` with no stdin).** `nnq req` now
   produces each request from the send-eval alone when no `-d`/`-F`
