@@ -39,39 +39,33 @@ module NNQ
       def setup_sockets
         @pull = NNQ::CLI::SocketSetup.build(NNQ::PULL0, @config)
         @push = NNQ::CLI::SocketSetup.build(NNQ::PUSH0, @config)
-        NNQ::CLI::SocketSetup.attach_endpoints(@pull, @in_eps, verbose: 0)
-        NNQ::CLI::SocketSetup.attach_endpoints(@push, @out_eps, verbose: 0)
-        @pull = NNQ::CLI::SocketSetup.maybe_wrap_zstd(@pull, @config.compress_in || @config.compress)
-        @push = NNQ::CLI::SocketSetup.maybe_wrap_zstd(@push, @config.compress_out || @config.compress)
+        NNQ::CLI::SocketSetup.attach_endpoints(
+          @pull, @in_eps,
+          compress_level: @config.compress_in || @config.compress,
+          verbose: 0,
+        )
+        NNQ::CLI::SocketSetup.attach_endpoints(
+          @push, @out_eps,
+          compress_level: @config.compress_out || @config.compress,
+          verbose: 0,
+        )
       end
 
 
       def log_endpoints
-        @in_eps.each { |ep| @log_port.send(ep.bind? ? "Bound to #{ep.url}" : "Connecting to #{ep.url}") }
-        @out_eps.each { |ep| @log_port.send(ep.bind? ? "Bound to #{ep.url}" : "Connecting to #{ep.url}") }
+        ts = @config.timestamps
+        @in_eps.each { |ep| @log_port.send(NNQ::CLI::Term.format_attach(ep.bind? ? :bind : :connect, ep.url, ts)) }
+        @out_eps.each { |ep| @log_port.send(NNQ::CLI::Term.format_attach(ep.bind? ? :bind : :connect, ep.url, ts)) }
       end
 
 
       def start_monitors
         trace = @config.verbose >= 3
+        ts = @config.timestamps
         [@pull, @push].each do |sock|
           sock.monitor(verbose: trace) do |event|
-            @log_port.send(format_event(event))
+            @log_port.send(NNQ::CLI::Term.format_event(event, ts))
           end
-        end
-      end
-
-
-      def format_event(event)
-        case event.type
-        when :message_sent
-          "nnq: >> #{NNQ::CLI::Formatter.preview(event.detail[:body])}"
-        when :message_received
-          "nnq: << #{NNQ::CLI::Formatter.preview(event.detail[:body])}"
-        else
-          ep     = event.endpoint ? " #{event.endpoint}" : ""
-          detail = event.detail ? " #{event.detail}" : ""
-          "nnq: #{event.type}#{ep}#{detail}"
         end
       end
 

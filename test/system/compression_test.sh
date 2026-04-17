@@ -1,5 +1,5 @@
 #!/bin/sh
-# Per-frame zstd compression (-z / -Z): large and small payload
+# Per-frame zstd compression (-z / -Z / --compress): large and small payload
 # round-trips, REQ/REP regression (the wrapper used to return the
 # encoded reply untouched, leaking a NUL preamble rendered as dots),
 # a byte-level NO-DOTS assertion on stdout, and a wire-size trace

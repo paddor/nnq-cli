@@ -316,32 +316,41 @@ describe "NNQ::CLI::CliParser.parse" do
     assert_empty opts[:out_endpoints]
   end
 
-  it "parses --compress as global" do
-    opts = NNQ::CLI::CliParser.parse(["push", "-c", "tcp://x:1", "--compress"])
-    assert opts[:compress]
+  it "parses -z as global" do
+    opts = NNQ::CLI::CliParser.parse(["push", "-c", "tcp://x:1", "-z"])
+    assert_equal(-3, opts[:compress])
     refute opts[:compress_in]
     refute opts[:compress_out]
   end
 
-  it "parses --compress after --in as compress_in" do
-    opts = NNQ::CLI::CliParser.parse(["pipe", "--in", "-c", "tcp://x:1", "--compress", "--out", "-c", "tcp://x:2"])
+  it "parses -z after --in as compress_in" do
+    opts = NNQ::CLI::CliParser.parse(["pipe", "--in", "-c", "tcp://x:1", "-z", "--out", "-c", "tcp://x:2"])
     refute opts[:compress]
-    assert opts[:compress_in]
+    assert_equal(-3, opts[:compress_in])
     refute opts[:compress_out]
   end
 
-  it "parses --compress after --out as compress_out" do
-    opts = NNQ::CLI::CliParser.parse(["pipe", "--in", "-c", "tcp://x:1", "--out", "-c", "tcp://x:2", "--compress"])
+  it "parses -z after --out as compress_out" do
+    opts = NNQ::CLI::CliParser.parse(["pipe", "--in", "-c", "tcp://x:1", "--out", "-c", "tcp://x:2", "-z"])
     refute opts[:compress]
     refute opts[:compress_in]
-    assert opts[:compress_out]
+    assert_equal(-3, opts[:compress_out])
   end
 
-  it "parses --compress on both sides" do
-    opts = NNQ::CLI::CliParser.parse(["pipe", "--in", "-c", "tcp://x:1", "--compress", "--out", "-c", "tcp://x:2", "--compress"])
+  it "parses -z on both sides" do
+    opts = NNQ::CLI::CliParser.parse(["pipe", "--in", "-c", "tcp://x:1", "-z", "--out", "-c", "tcp://x:2", "-z"])
     refute opts[:compress]
-    assert opts[:compress_in]
-    assert opts[:compress_out]
+    assert_equal(-3, opts[:compress_in])
+    assert_equal(-3, opts[:compress_out])
+  end
+
+  it "parses --compress=LEVEL as custom level" do
+    opts = NNQ::CLI::CliParser.parse(["push", "-c", "tcp://x:1", "--compress=7"])
+    assert_equal 7, opts[:compress]
+  end
+
+  it "rejects --compress=LEVEL outside -7..19" do
+    assert_raises(SystemExit) { quietly { NNQ::CLI::CliParser.parse(["push", "-c", "tcp://x:1", "--compress=99"]) } }
   end
 
   it "parses -r as a deferred script path" do

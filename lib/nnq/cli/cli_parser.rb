@@ -110,9 +110,13 @@ module NNQ
 
         -- Compression ----------------------------------------------
 
-          # both sides must use --compress
-          nnq pull --bind tcp://:5557 --compress &
-          echo "compressible data" | nnq push --connect tcp://localhost:5557 --compress
+          # sender picks a level, receiver just needs -z
+          echo "compressible data" | nnq push --connect tcp://localhost:5557 -z
+          nnq pull --bind tcp://:5557 -z
+
+          # higher compression (level 3)
+          echo "compressible data" | nnq push --connect tcp://localhost:5557 -Z
+          nnq pull --bind tcp://:5557 -z
 
         -- Ruby Eval ------------------------------------------------
 
@@ -182,6 +186,7 @@ module NNQ
         parallel:      nil,
         transient:     false,
         verbose:       0,
+        timestamps:    nil,
         quiet:         false,
         echo:          false,
         scripts:       [],
@@ -290,24 +295,20 @@ module NNQ
           o.on("--rcvbuf N", "SO_RCVBUF kernel buffer size (e.g. 4K, 1M)") { |v| opts[:rcvbuf] = parse_byte_size(v) }
 
           o.separator "\nCompression:"
-          load_zstd = -> { require "nnq/zstd" }
-          set_compress = lambda do |sym|
-            load_zstd.call
+          set_compress = lambda do |level|
+            require "nnq/zstd"
             target = case pipe_side
                      when :in  then :compress_in
                      when :out then :compress_out
                      else           :compress
                      end
-            if opts[target] && opts[target] != sym
-              abort "nnq: -z and -Z are mutually exclusive"
-            end
-            opts[target] = sym
+            opts[target] = level
           end
-          o.on("-z", "--compress", "Zstd compression (fast, level -3; modal with --in/--out)") do
-            set_compress.call(:fast)
-          end
-          o.on("-Z", "--compress-high", "Zstd compression (balanced, level 3; modal with --in/--out)") do
-            set_compress.call(:balanced)
+          o.on("-z", "Zstd compression (level -3, fast)") { set_compress.call(-3) }
+          o.on("-Z", "Zstd compression (level 3, better ratio)") { set_compress.call(3) }
+          o.on("--compress=LEVEL", Integer, "Zstd compression with custom level (-7..19)") do |v|
+            abort "nnq: --compress level must be -7..19" unless (-7..19).include?(v)
+            set_compress.call(v)
           end
 
           o.separator "\nProcessing (-e = incoming, -E = outgoing):"
@@ -324,7 +325,10 @@ module NNQ
           }
 
           o.separator "\nOther:"
-          o.on("-v", "--verbose",   "Verbosity: -v endpoints, -vv events, -vvv messages, -vvvv timestamps") { opts[:verbose] += 1 }
+          o.on("-v", "--verbose",   "Verbosity: -v endpoints, -vv events, -vvv messages") { opts[:verbose] += 1 }
+          o.on(      "--timestamps PRECISION", %w[s ms us], "Prefix log lines with UTC timestamp (s/ms/µs, default ms)") { |v|
+            opts[:timestamps] = v.to_sym
+          }
           o.on("-q", "--quiet",     "Suppress message output")           { opts[:quiet] = true }
           o.on(      "--transient", "Exit when all peers disconnect")    { opts[:transient] = true }
           o.on("-V", "--version") {
@@ -345,6 +349,8 @@ module NNQ
 
           o.separator "\nExit codes: 0 = success, 1 = error, 2 = timeout, 3 = eval error"
         end
+
+        argv.map! { |a| a == "--timestamps" ? "--timestamps=ms" : a }
 
         begin
           parser.parse!(argv)

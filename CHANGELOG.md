@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- **`-z` / `-Z` / `--compress=LEVEL` rewrite `tcp://` URLs to
+  `zstd+tcp://`** instead of wrapping the socket post-construction.
+  Tracks the `nnq-zstd` transport-plugin change: compression is now
+  a transport-layer concern and `NNQ::Zstd::Wrapper` is gone. `-z`
+  stays as the shorthand for level `-3` (fast), `-Z` as shorthand
+  for level `3`, and the new `--compress=LEVEL` accepts any integer
+  in `-7..19`. User-supplied `zstd+tcp://` URLs pass through
+  unrewritten. Process title reflects the exact flag used.
+- **`--timestamps PRECISION` flag** (split out from `-vvvv`).
+  Accepts `s`, `ms`, or `us`; bare `--timestamps` defaults to `ms`.
+  Prefixes every stderr log line (events, attach notices, `log`)
+  with a UTC ISO8601 timestamp at the requested precision.
+  `-v`/`-vv`/`-vvv` verbosity levels are now purely about *what* is
+  logged; timestamp formatting is orthogonal.
+- **Richer monitor event detail formatting.** `CLI::Term.format_event`
+  delegates detail rendering to a new `format_event_detail` helper:
+  plain peer-close exceptions render as `(closed by peer)`, other
+  errors render their message, and hashes with `:reason` surface
+  the reason string. Previously the full hash was inlined via
+  `#inspect`.
+
 ## 0.4.0 — 2026-04-16
 
 - **`-P0` auto-sizes to `nproc`** (capped at 16). `nnq pipe -P 0`

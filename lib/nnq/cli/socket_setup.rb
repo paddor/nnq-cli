@@ -54,42 +54,54 @@ module NNQ
 
       # Bind/connect +sock+ using URL strings from +config.binds+ / +config.connects+.
       # +verbose+ is the integer verbosity level (0 = silent).
-      def self.attach(sock, config, verbose: 0)
+      def self.attach(sock, config, verbose: 0, timestamps: nil)
+        opts = compress_opts(config.compress)
+
         config.binds.each do |url|
-          sock.bind(url)
-          CLI::Term.write_attach(:bind, sock.last_endpoint, verbose) if verbose >= 1
+          sock.bind(compress_url(url, config.compress), **opts)
+          CLI::Term.write_attach(:bind, sock.last_endpoint, timestamps) if verbose >= 1
         end
 
         config.connects.each do |url|
-          sock.connect(url)
-          CLI::Term.write_attach(:connect, url, verbose) if verbose >= 1
+          sock.connect(compress_url(url, config.compress), **opts)
+          CLI::Term.write_attach(:connect, url, timestamps) if verbose >= 1
         end
       end
 
 
       # Bind/connect +sock+ from an Array of Endpoint objects.
       # Used by PipeRunner, which works with structured endpoint lists.
-      # +verbose+ is the integer verbosity level (0 = silent).
-      def self.attach_endpoints(sock, endpoints, verbose: 0)
+      # +compress_level+ rewrites +tcp://+ endpoints to +zstd+tcp://+ when set.
+      def self.attach_endpoints(sock, endpoints, compress_level: nil, verbose: 0, timestamps: nil)
+        opts = compress_opts(compress_level)
+
         endpoints.each do |ep|
+          url = compress_url(ep.url, compress_level)
+
           if ep.bind?
-            sock.bind(ep.url)
-            CLI::Term.write_attach(:bind, sock.last_endpoint, verbose) if verbose >= 1
+            sock.bind(url, **opts)
+            CLI::Term.write_attach(:bind, sock.last_endpoint, timestamps) if verbose >= 1
           else
-            sock.connect(ep.url)
-            CLI::Term.write_attach(:connect, ep.url, verbose) if verbose >= 1
+            sock.connect(url, **opts)
+            CLI::Term.write_attach(:connect, ep.url, timestamps) if verbose >= 1
           end
         end
       end
 
 
-      # Wrap +sock+ with NNQ::Zstd if +mode+ is :fast or :balanced.
-      # Returns the wrapper (decorator) or +sock+ unchanged.
-      def self.maybe_wrap_zstd(sock, mode)
-        return sock unless mode
-        require "nnq/zstd"
-        level = mode == :balanced ? 3 : -3
-        NNQ::Zstd.wrap(sock, level: level)
+      # Upgrades a +tcp://+ URL to +zstd+tcp://+ when a compression level
+      # is set. Returns the URL unchanged for non-TCP schemes or when
+      # compression is off. User-supplied +zstd+tcp://+ URLs pass through.
+      def self.compress_url(url, level)
+        return url unless level
+        return url unless url.start_with?("tcp://")
+        url.sub("tcp://", "zstd+tcp://")
+      end
+
+
+      # Returns bind/connect kwargs for compression (level:) when enabled.
+      def self.compress_opts(level)
+        level ? { level: level } : {}
       end
 
 

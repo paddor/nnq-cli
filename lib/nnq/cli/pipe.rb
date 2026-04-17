@@ -66,10 +66,12 @@ module NNQ
       def build_pull_push(in_eps, out_eps)
         pull = SocketSetup.build(NNQ::PULL0, config)
         push = SocketSetup.build(NNQ::PUSH0, config)
-        SocketSetup.attach_endpoints(pull, in_eps, verbose: config.verbose)
-        SocketSetup.attach_endpoints(push, out_eps, verbose: config.verbose)
-        pull = SocketSetup.maybe_wrap_zstd(pull, config.compress_in || config.compress)
-        push = SocketSetup.maybe_wrap_zstd(push, config.compress_out || config.compress)
+        SocketSetup.attach_endpoints(pull, in_eps,
+                                     compress_level: config.compress_in || config.compress,
+                                     verbose: config.verbose, timestamps: config.timestamps)
+        SocketSetup.attach_endpoints(push, out_eps,
+                                     compress_level: config.compress_out || config.compress,
+                                     verbose: config.verbose, timestamps: config.timestamps)
         [pull, push]
       end
 
@@ -161,8 +163,12 @@ module NNQ
       def set_pipe_process_title
         in_eps, out_eps = resolve_endpoints
         title = ["nnq pipe"]
-        if (m = config.compress || config.compress_in || config.compress_out)
-          title << (m == :balanced ? "-Z" : "-z")
+        if (lvl = config.compress || config.compress_in || config.compress_out)
+          title << case lvl
+                   when -3 then "-z"
+                   when 3  then "-Z"
+                   else "--compress=#{lvl}"
+                   end
         end
         title << "-P#{config.parallel}" if config.parallel
         title.concat(in_eps.map(&:url))
@@ -193,11 +199,10 @@ module NNQ
 
 
       def start_event_monitors
-        verbose = config.verbose >= 3
-        v = config.verbose
+        trace = config.verbose >= 3
         [@pull, @push].each do |sock|
-          sock.monitor(verbose: verbose) do |event|
-            CLI::Term.write_event(event, v)
+          sock.monitor(verbose: trace) do |event|
+            CLI::Term.write_event(event, config.timestamps)
           end
         end
       end

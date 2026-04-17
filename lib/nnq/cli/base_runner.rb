@@ -65,13 +65,12 @@ module NNQ
 
 
       def create_socket
-        sock = SocketSetup.build(@klass, config)
-        SocketSetup.maybe_wrap_zstd(sock, config.compress)
+        SocketSetup.build(@klass, config)
       end
 
 
       def attach_endpoints
-        SocketSetup.attach(@sock, config, verbose: config.verbose)
+        SocketSetup.attach(@sock, config, verbose: config.verbose, timestamps: config.timestamps)
       end
 
 
@@ -450,7 +449,7 @@ module NNQ
       def set_process_title(endpoints: nil)
         eps = endpoints || config.endpoints
         title = ["nnq", config.type_name]
-        title << (config.compress == :balanced ? "-Z" : "-z") if config.compress
+        title << compress_flag(config.compress) if config.compress
         title << "-P#{config.parallel}" if config.parallel
 
         eps.each do |ep|
@@ -461,25 +460,30 @@ module NNQ
       end
 
 
+      def compress_flag(level)
+        case level
+        when -3 then "-z"
+        when 3  then "-Z"
+        else "--compress=#{level}"
+        end
+      end
+
+
       # -- Logging -----------------------------------------------------
 
 
       def log(msg)
         return unless config.verbose >= 1
 
-        $stderr.write("#{Term.log_prefix(config.verbose)}nnq: #{msg}\n")
+        $stderr.write("#{Term.log_prefix(config.timestamps)}nnq: #{msg}\n")
       end
 
 
-      # -vv: log connect/disconnect/retry/timeout events via Socket#monitor
-      # -vvv: also log message sent/received traces
-      # -vvvv: prepend ISO8601 timestamps
       def start_event_monitor
-        verbose = config.verbose >= 3
-        v       = config.verbose
+        trace = config.verbose >= 3
 
-        @sock.monitor(verbose: verbose) do |event|
-          CLI::Term.write_event(event, v)
+        @sock.monitor(verbose: trace) do |event|
+          CLI::Term.write_event(event, config.timestamps)
         end
       end
 

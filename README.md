@@ -27,22 +27,15 @@ nnq rep -b tcp://:5555 --echo
 echo "hello" | nnq req -c tcp://localhost:5555
 
 # Upcase server — -e evals Ruby on each incoming message
-nnq rep -b tcp://:5555 -e '$_.upcase'
+nnq rep -b tcp://:5555 -e 'it.upcase'
 ```
 
 ```
 Usage: nnq TYPE [options]
 
-Types:    req, rep, pub, sub, push, pull, pair
+Types:    req, rep, pub, sub, push, pull, pair, bus, surveyor, respondent
 Virtual:  pipe (PULL → eval → PUSH)
 ```
-
-## SP messages are single-frame
-
-Unlike ZeroMQ, nanomsg SP messages have **one frame**, not many. The CLI
-exposes `$_` (the message body, a `String`) and `$F` (a 1-element array
-`[$_]`) for compatibility with omq-cli expressions, but multipart shenanigans
-don't apply.
 
 ## Connection
 
@@ -53,7 +46,13 @@ nnq pull --bind tcp://:5557          # listen on port 5557
 nnq push --connect tcp://host:5557   # connect to host
 nnq pull -b ipc:///tmp/feed.sock     # IPC (unix socket)
 nnq push -c ipc://@abstract          # IPC (abstract namespace, Linux)
-nnq push -c inproc://name            # in-process queue
+```
+
+The `@name` shortcut expands to `ipc://@name` (Linux abstract namespace):
+
+```sh
+nnq rep -b @echo --echo
+echo hi | nnq req -c @echo
 ```
 
 Bind/connect order doesn't matter — `connect` is non-blocking and the engine
@@ -72,8 +71,8 @@ multiple per side.
 | `push` | `pull` | Pipeline — round-robin to workers |
 | `pub`  | `sub`  | Publish/subscribe — fan-out with topic prefix filtering |
 
-Send-only sockets read from stdin (or `--data`/`--file`) and send. Recv-only
-sockets receive and write to stdout.
+Send-only sockets read from stdin (or `--data`/`--file`/`-E`) and send.
+Recv-only sockets receive and write to stdout.
 
 ```sh
 echo "task" | nnq push -c tcp://worker:5557
@@ -92,11 +91,24 @@ nnq pull -b tcp://:5557
 nnq rep -b tcp://:5555 --echo
 
 # upcase server
-nnq rep -b tcp://:5555 -e '$_.upcase'
+nnq rep -b tcp://:5555 -e 'it.upcase'
 
 # client
 echo "hello" | nnq req -c tcp://localhost:5555
 ```
+
+### Bidirectional (survey)
+
+| Type | Behavior |
+|------|----------|
+| `surveyor`   | Broadcasts a survey, collects replies within a time window |
+| `respondent` | Receives survey, sends a reply |
+
+### Bidirectional (bus)
+
+| Type | Behavior |
+|------|----------|
+| `bus` | Every-to-every — all peers see each other's messages |
 
 ### Bidirectional (concurrent send + recv)
 
@@ -112,10 +124,13 @@ These spawn two concurrent tasks: a receiver (prints incoming) and a sender
 Pipe creates an internal PULL → eval → PUSH pipeline:
 
 ```sh
-nnq pipe -c ipc://@work -c ipc://@sink -e '$_.upcase'
+nnq pipe -c ipc://@work -c ipc://@sink -e 'it.upcase'
 
 # with Ractor workers for CPU parallelism
-nnq pipe -c ipc://@work -c ipc://@sink -P 4 -r./fib.rb -e 'fib(Integer($_)).to_s'
+nnq pipe -c ipc://@work -c ipc://@sink -P 4 -r./fib.rb -e 'fib(Integer(it)).to_s'
+
+# auto-detect cores (-P 0 = nproc, capped at 16)
+nnq pipe -c ipc://@work -c ipc://@sink -P 0 -e 'it.upcase'
 ```
 
 The first endpoint is the pull-side (input), the second is the push-side
@@ -126,19 +141,19 @@ The first endpoint is the pull-side (input), the second is the push-side
 `-e` (alias `--recv-eval`) runs a Ruby expression for each **incoming** message.
 `-E` (alias `--send-eval`) runs a Ruby expression for each **outgoing** message.
 
-### Globals
+The message body is available as `it` (Ruby 3.4's default block variable) or
+via explicit block-parameter syntax `|msg| msg.upcase`:
 
-| Variable | Value |
-|----------|-------|
-| `$_` | Message body (`String`) |
-| `$F` | `[$_]` — 1-element array, kept for omq-cli compatibility |
+```sh
+nnq rep -b tcp://:5555 -e 'it.upcase'
+nnq rep -b tcp://:5555 -e '|msg| msg.upcase'
+```
 
 ### Return value
 
 | Return | Effect |
 |--------|--------|
 | `String` | Used as the message body |
-| `Array` | First element used as the body |
 | `nil` | Message is skipped (filtered) |
 | `self` (the socket) | Signals "I already sent" (REP only) |
 
@@ -146,10 +161,10 @@ The first endpoint is the pull-side (input), the second is the push-side
 
 ```sh
 # skip messages matching a pattern
-nnq pull -b tcp://:5557 -e 'next if /^#/.match?($_); $_'
+nnq pull -b tcp://:5557 -e 'next if it.start_with?("#"); it'
 
 # stop on "quit"
-nnq pull -b tcp://:5557 -e 'break if /quit/.match?($_); $_'
+nnq pull -b tcp://:5557 -e 'break if it =~ /quit/; it'
 ```
 
 ### BEGIN/END blocks
@@ -157,10 +172,23 @@ nnq pull -b tcp://:5557 -e 'break if /quit/.match?($_); $_'
 Like awk — `BEGIN{}` runs once before the message loop, `END{}` runs after:
 
 ```sh
-nnq pull -b tcp://:5557 -e 'BEGIN{ @sum = 0 } @sum += Integer($_); next END{ puts @sum }'
+nnq pull -b tcp://:5557 -e 'BEGIN{ @sum = 0 } @sum += Integer(it); nil END{ puts @sum }'
 ```
 
 Local variables won't share state between blocks. Use `@ivars` instead.
+
+### Generator mode
+
+`-E` without stdin input produces messages from the eval alone, for any
+send-capable socket (PUSH, PUB, REQ). Bounded by `-n` or paced by `-i`:
+
+```sh
+# generate 10 requests with no stdin
+nnq req -c tcp://localhost:5555 -E '"ping"' -n 10
+
+# publish a tick every second
+nnq pub -c tcp://localhost:5556 -E 'Time.now.to_s' -i 1
+```
 
 ### Which sockets accept which flag
 
@@ -168,32 +196,29 @@ Local variables won't share state between blocks. Use `@ivars` instead.
 |--------|-------------|-------------|
 | push, pub | transforms outgoing | error |
 | pull, sub | error | transforms incoming |
-| req      | transforms request | transforms reply |
-| rep      | error | transforms request → return = reply |
-| pair     | transforms outgoing | transforms incoming |
-| pipe     | error | transforms in pipeline |
+| req       | transforms request | transforms reply |
+| rep       | error | transforms request → return = reply |
+| pair      | transforms outgoing | transforms incoming |
+| pipe      | error | transforms in pipeline |
 
 ### Examples
 
 ```sh
 # upcase echo server
-nnq rep -b tcp://:5555 -e '$_.upcase'
+nnq rep -b tcp://:5555 -e 'it.upcase'
 
 # transform before sending
-echo hello | nnq push -c tcp://localhost:5557 -E '$_.upcase'
+echo hello | nnq push -c tcp://localhost:5557 -E 'it.upcase'
 
 # filter incoming
-nnq pull -b tcp://:5557 -e '$_.include?("error") ? $_ : nil'
+nnq pull -b tcp://:5557 -e 'it.include?("error") ? it : nil'
 
 # REQ: different transforms per direction
 echo hello | nnq req -c tcp://localhost:5555 \
-  -E '$_.upcase' -e '$_.reverse'
-
-# generate messages without stdin
-nnq pub -c tcp://localhost:5556 -E 'Time.now.to_s' -i 1
+  -E 'it.upcase' -e 'it.reverse'
 
 # use gems
-nnq sub -c tcp://localhost:5556 -s "" -rjson -e 'JSON.parse($_)["temperature"]'
+nnq sub -c tcp://localhost:5556 -s "" -rjson -e 'JSON.parse(it)["temperature"]'
 ```
 
 ## Script handlers (-r)
@@ -234,6 +259,7 @@ nnq req -c tcp://localhost:5555 -r./handler.rb
 | (stdin) | Read lines from stdin, one message per line |
 | `-D "text"` | Send literal string (one-shot or repeated with `-i`) |
 | `-F file` | Read message from file (`-F -` reads stdin as blob) |
+| `-E expr` | Generate messages from eval (no stdin needed) |
 | `--echo` | Echo received messages back (REP only) |
 
 `-D` and `-F` are mutually exclusive.
@@ -242,14 +268,12 @@ nnq req -c tcp://localhost:5555 -r./handler.rb
 
 | Flag | Format |
 |------|--------|
-| `-A` / `--ascii` | Tab-separated frames, non-printable → dots (default) |
+| `-A` / `--ascii` | Safe ASCII, non-printable → dots (default) |
 | `-Q` / `--quoted` | C-style escapes, lossless round-trip |
 | `--raw` | Raw body, newline-delimited |
 | `-J` / `--jsonl` | JSON Lines — `["body"]` per line |
 | `--msgpack` | MessagePack arrays (binary stream) |
-| `-M` / `--marshal` | Ruby Marshal (binary stream of `Array<String>` objects) |
-
-Since SP messages are single-frame, ASCII/quoted modes don't insert tabs.
+| `-M` / `--marshal` | Ruby Marshal (binary stream) |
 
 ```sh
 nnq push -c tcp://localhost:5557 < data.txt
@@ -277,13 +301,33 @@ nnq pull -b tcp://:5557 -t 5
 
 ## Compression
 
-Both sides must use `--compress` (`-z`). Uses LZ4 frame format, provided by
-the `rlz4` gem (Ractor-safe, Rust extension via `lz4_flex`).
+Transparent [Zstd](https://github.com/paddor/nnq-zstd) compression with
+sender-side dictionary training and in-band dict shipping. The receiver just
+needs `-z` — decompression is level-agnostic:
+
+| Flag | Level | Use case |
+|------|-------|----------|
+| `-z` | −3 | Fast (default) |
+| `-Z` | 3  | Better ratio |
+| `--compress=N` | −7..19 | Custom level |
 
 ```sh
+# sender picks level, receiver just decompresses
 nnq push -c tcp://remote:5557 -z < data.txt
 nnq pull -b tcp://:5557 -z
+
+# better compression ratio
+nnq push -c tcp://remote:5557 -Z < data.txt
+nnq pull -b tcp://:5557 -z
+
+# custom level (e.g. max compression)
+nnq push -c tcp://remote:5557 --compress=19 < data.txt
+nnq pull -b tcp://:5557 -z
 ```
+
+Streams of similar small messages benefit from the automatic dictionary
+training — the sender collects samples, trains a dict, and ships it in-band
+to the receiver.
 
 ## Subscriptions
 
@@ -304,16 +348,16 @@ Pipe creates an in-process PULL → eval → PUSH pipeline:
 
 ```sh
 # basic pipe (positional: first = input, second = output)
-nnq pipe -c ipc://@work -c ipc://@sink -e '$_.upcase'
+nnq pipe -c ipc://@work -c ipc://@sink -e 'it.upcase'
 
-# parallel Ractor workers (default: all CPUs)
-nnq pipe -c ipc://@work -c ipc://@sink -P -r./fib.rb -e 'fib(Integer($_)).to_s'
+# auto-detect CPU count
+nnq pipe -c ipc://@work -c ipc://@sink -P 0 -e 'it.upcase'
 
 # fixed number of workers
-nnq pipe -c ipc://@work -c ipc://@sink -P 4 -e '$_.upcase'
+nnq pipe -c ipc://@work -c ipc://@sink -P 4 -e 'it.upcase'
 
 # exit when producer disconnects
-nnq pipe -c ipc://@work -c ipc://@sink --transient -e '$_.upcase'
+nnq pipe -c ipc://@work -c ipc://@sink --transient -e 'it.upcase'
 ```
 
 ### Multi-peer pipe with `--in`/`--out`
@@ -323,13 +367,13 @@ switches — subsequent `-b`/`-c` flags attach to the current side:
 
 ```sh
 # fan-in: 2 producers → 1 consumer
-nnq pipe --in -c ipc://@work1 -c ipc://@work2 --out -c ipc://@sink -e '$_'
+nnq pipe --in -c ipc://@work1 -c ipc://@work2 --out -c ipc://@sink -e 'it'
 
 # fan-out: 1 producer → 2 consumers (round-robin)
-nnq pipe --in -b tcp://:5555 --out -c ipc://@sink1 -c ipc://@sink2 -e '$_'
+nnq pipe --in -b tcp://:5555 --out -c ipc://@sink1 -c ipc://@sink2 -e 'it'
 
 # parallel workers with fan-in (all must be -c)
-nnq pipe --in -c ipc://@a -c ipc://@b --out -c ipc://@sink -P 4 -e '$_'
+nnq pipe --in -c ipc://@a -c ipc://@b --out -c ipc://@sink -P 4 -e 'it'
 ```
 
 `-P`/`--parallel` requires all endpoints to be `--connect`. In parallel mode,
@@ -342,7 +386,7 @@ pipeline workers and sinks:
 
 ```sh
 # worker exits when producer is done
-nnq pipe -c ipc://@work -c ipc://@sink --transient -e '$_.upcase'
+nnq pipe -c ipc://@work -c ipc://@sink --transient -e 'it.upcase'
 
 # sink exits when all workers disconnect
 nnq pull -b tcp://:5557 --transient
@@ -350,17 +394,22 @@ nnq pull -b tcp://:5557 --transient
 
 ## Verbose / monitor mode
 
-Pass `-v` (repeatable) for increasingly chatty output:
+Pass `-v` (repeatable) for increasingly chatty output on stderr:
 
 | Level | Output |
 |-------|--------|
-| `-v`   | Bind/connect endpoints |
-| `-vv`  | Lifecycle events (`:listening`, `:connected`, `:disconnected`, ...) |
-| `-vvv` | Per-message trace (`:message_sent`, `:message_received`) |
+| `-v`    | Bind/connect endpoints |
+| `-vv`   | Lifecycle events (`:listening`, `:connected`, `:disconnected`, ...) |
+| `-vvv`  | Per-message trace (`:message_sent`, `:message_received` with byte size) |
+
+Add `--timestamps` to prefix log lines with UTC time (default ms precision):
 
 ```sh
-nnq pub -b tcp://:5556 -vv
+nnq pub -b tcp://:5556 -vv --timestamps
+nnq pull -b tcp://:5557 -vvv --timestamps=us
 ```
+
+Supported precisions: `s`, `ms` (default), `us`.
 
 ## Exit codes
 
