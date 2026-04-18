@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-04-18
 
 - **`-z` / `-Z` / `--compress=LEVEL` rewrite `tcp://` URLs to
   `zstd+tcp://`** instead of wrapping the socket post-construction.

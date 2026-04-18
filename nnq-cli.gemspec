@@ -12,7 +12,7 @@ Gem::Specification.new do |s|
                   "messages on any NNQ socket type (REQ/REP, PUB/SUB, " \
                   "PUSH/PULL, PAIR). Supports Ruby eval (-e/-E), script " \
                   "handlers (-r), the virtual `pipe` socket with optional " \
-                  "Ractor parallelism, multiple formats (ASCII, JSON Lines, " \
+                  "Ractor parallelism, multiple formats (ASCII, " \
                   "msgpack, Marshal), and Zstd compression. Like nngcat from " \
                   "libnng, but with Ruby superpowers."
   s.homepage    = "https://github.com/paddor/nnq-cli"
@@ -24,7 +24,7 @@ Gem::Specification.new do |s|
   s.bindir      = "exe"
   s.executables = ["nnq"]
 
-  s.add_dependency "nnq",      "~> 0.5"
-  s.add_dependency "nnq-zstd", "~> 0.1"
+  s.add_dependency "nnq",      "~> 0.7"
+  s.add_dependency "nnq-zstd", "~> 0.2"
   s.add_dependency "msgpack"
 end
