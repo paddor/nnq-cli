@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2 — 2026-04-20
+
+- use nnq ~> 0.8
+
 ## 0.5.1 — 2026-04-20
 
 - **`-vvv` trace shows compressed wire size.** When the peer is

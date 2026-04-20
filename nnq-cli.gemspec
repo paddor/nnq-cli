@@ -24,7 +24,7 @@ Gem::Specification.new do |s|
   s.bindir      = "exe"
   s.executables = ["nnq"]
 
-  s.add_dependency "nnq",      "~> 0.7"
-  s.add_dependency "nnq-zstd", "~> 0.2"
+  s.add_dependency "nnq",      "~> 0.8", ">= 0.8.2"
+  s.add_dependency "nnq-zstd", "~> 0.2", ">= 0.2.1"
   s.add_dependency "msgpack"
 end
