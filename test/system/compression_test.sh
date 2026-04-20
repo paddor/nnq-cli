@@ -52,19 +52,19 @@ wait
 check "req/rep -Z round-trip" "HELLO" "$REQ_ZZ_OUT"
 
 # 1000 Zs should compress to far less than 1000 bytes; the pull
-# side's -vvv trace must log a wire size < 1000.
+# side's -vvv trace must log `wire=NB` < 1000. Uses tcp:// because
+# nnq-zstd is a transport-layer plugin that only wraps tcp://.
 echo "Compression wire size trace:"
-U=$(ipc)
 PAYLOAD=$(ruby -e "print 'Z' * 1000")
 PULL_LOG="$TMPDIR/wire_pull.log"
-$NNQ pull -b $U -n 1 -z -vvv $T > $TMPDIR/wire_out.txt 2>"$PULL_LOG" &
-printf '%s' "$PAYLOAD" | $NNQ push -c $U -z $T 2>>"$STDERR_LOG"
+$NNQ pull -b tcp://127.0.0.1:17300 -n 1 -z -vvv $T > $TMPDIR/wire_out.txt 2>"$PULL_LOG" &
+printf '%s' "$PAYLOAD" | $NNQ push -c tcp://127.0.0.1:17300 -z $T 2>>"$STDERR_LOG"
 wait
-# nnq -vvv trace format: "nnq: << (NB) preview"
-PULL_WIRE=$(grep -oE '<<[[:space:]]+\([0-9]+B\)' "$PULL_LOG" | head -1 | grep -oE '[0-9]+' || echo "")
+# nnq -vvv trace format with compression: "nnq: << (1000B wire=NB) preview"
+PULL_WIRE=$(grep -oE 'wire=[0-9]+B' "$PULL_LOG" | head -1 | grep -oE '[0-9]+' || echo "")
 if [ -n "$PULL_WIRE" ] && [ "$PULL_WIRE" -lt 1000 ]; then
   pass "pull -vvv logs wire=${PULL_WIRE}B < 1000"
 else
-  fail "pull -vvv wire size" "<1000" "$PULL_WIRE"
+  fail "pull -vvv wire size" "<1000" "${PULL_WIRE:-<missing>}"
   [ -f "$PULL_LOG" ] && cat "$PULL_LOG" >&2
 fi

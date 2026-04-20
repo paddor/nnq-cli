@@ -78,12 +78,18 @@ module NNQ
 
 
       # Formats a message body for human-readable preview (logging).
+      # When +wire_size+ is given and differs from the plaintext size,
+      # the header shows the compressed on-the-wire size too, e.g.
+      # "(1000B wire=27B) ZZZZZZZZZZZZ...".
       #
       # @param body [String] message body
+      # @param wire_size [Integer, nil] compressed bytes on the wire
       # @return [String] truncated preview
-      def self.preview(body)
-        body = body.to_s
-        "(#{body.bytesize}B) #{preview_body(body)}"
+      def self.preview(body, wire_size: nil)
+        body   = body.to_s
+        size   = "#{body.bytesize}B"
+        size   = "#{size} wire=#{wire_size}B" if wire_size && wire_size != body.bytesize
+        "(#{size}) #{preview_body(body)}"
       end
 
 

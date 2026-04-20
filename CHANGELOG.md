@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.1 — 2026-04-20
+
+- **`-vvv` trace shows compressed wire size.** When the peer is
+  `zstd+tcp://` the `:message_received` event detail carries the
+  compressed byte count (via `ZstdConnection#last_wire_size_in`),
+  and `Formatter.preview` renders it as `(1000B wire=21B)` next
+  to the plaintext size — only when the two differ, so plain
+  transports keep the old `(NB)` header. Fixes the wire-size
+  system test that silently regressed after the transport-layer
+  zstd move (the old above-socket wrapper let the engine monitor
+  observe compressed bytes directly; the transport-layer plugin
+  decompresses inside `#receive_message`). Test also switched
+  from `ipc://` to `tcp://`, since `zstd+` only wraps TCP.
+  Requires nnq ≥ 0.8.2 and nnq-zstd ≥ 0.2.1.
+
 ## 0.5.0 — 2026-04-18
 
 - **`-z` / `-Z` / `--compress=LEVEL` rewrite `tcp://` URLs to
